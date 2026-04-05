@@ -1345,6 +1345,7 @@
         </div>
 
         <button onclick="tfGenerate()" style="width:100%;padding:14px;font-size:1.1em;font-weight:700;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;letter-spacing:0.5px;transition:background 0.2s;">Generate Terraform Script</button>
+        <div id="tfValidationError" style="display:none;margin-top:10px;padding:10px 12px;border:1px solid #EF9A9A;background:#FFEBEE;color:#B71C1C;border-radius:6px;font-size:0.86em;font-weight:600;"></div>
       </div>
 
       <!-- RIGHT: Output -->
@@ -1897,6 +1898,71 @@
     return name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/-/g, '_');
   }
 
+  function tfSetValidationError(msg) {
+    var el = document.getElementById('tfValidationError');
+    if (!el) return;
+    if (msg) {
+      el.textContent = msg;
+      el.style.display = 'block';
+    } else {
+      el.textContent = '';
+      el.style.display = 'none';
+    }
+  }
+
+  function tfParseCidr(cidr) {
+    if (!cidr) return { error: 'CIDR is required.' };
+    var parts = cidr.trim().split('/');
+    if (parts.length !== 2) return { error: 'CIDR must be in format x.x.x.x/prefix.' };
+    var ip = parts[0];
+    var prefix = Number(parts[1]);
+    if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) return { error: 'Prefix must be between /0 and /32.' };
+
+    var octets = ip.split('.');
+    if (octets.length !== 4) return { error: 'IPv4 address must have 4 octets.' };
+    var nums = [];
+    for (var i = 0; i < octets.length; i++) {
+      var val = Number(octets[i]);
+      if (!Number.isInteger(val) || val < 0 || val > 255) return { error: 'Each octet must be in range 0-255.' };
+      nums.push(val);
+    }
+
+    var ipInt = ipToInt(nums[0], nums[1], nums[2], nums[3]);
+    var mask = prefix === 0 ? 0 : (0xFFFFFFFF << (32 - prefix)) >>> 0;
+    var start = (ipInt & mask) >>> 0;
+    if (ipInt !== start) return { error: 'CIDR must start at network boundary.' };
+
+    var size = Math.pow(2, 32 - prefix);
+    var end = (start + size - 1) >>> 0;
+    return { start: start, end: end, prefix: prefix, cidr: intToIp(start) + '/' + prefix };
+  }
+
+  function tfValidateCidrs(vpcCidr, subs) {
+    var vpc = tfParseCidr(vpcCidr);
+    if (vpc.error) return 'Invalid VPC CIDR "' + vpcCidr + '": ' + vpc.error;
+
+    var parsedSubs = [];
+    for (var i = 0; i < subs.length; i++) {
+      var s = subs[i];
+      var parsed = tfParseCidr(s.cidr);
+      if (parsed.error) return 'Invalid subnet CIDR for "' + s.name + '" (' + s.cidr + '): ' + parsed.error;
+      if (parsed.start < vpc.start || parsed.end > vpc.end) {
+        return 'Subnet "' + s.name + '" (' + s.cidr + ') must be inside VPC range ' + vpc.cidr + '.';
+      }
+      parsedSubs.push({ name: s.name, cidr: s.cidr, start: parsed.start, end: parsed.end });
+    }
+
+    parsedSubs.sort(function(a, b) { return a.start - b.start; });
+    for (var j = 1; j < parsedSubs.length; j++) {
+      var prev = parsedSubs[j - 1];
+      var curr = parsedSubs[j];
+      if (curr.start <= prev.end) {
+        return 'Subnet overlap detected between "' + prev.name + '" (' + prev.cidr + ') and "' + curr.name + '" (' + curr.cidr + ').';
+      }
+    }
+    return '';
+  }
+
   function tfGenerate() {
     var envKey    = document.getElementById('tfEnv').value;
     var env       = TF_ENV_MAP[envKey];
@@ -1931,6 +1997,14 @@
         pubIp:  document.getElementById('tfSubPubIp_' + s.id).value
       });
     }
+
+    var cidrValidationError = tfValidateCidrs(vpcCidr, subs);
+    if (cidrValidationError) {
+      tfSetValidationError(cidrValidationError);
+      document.getElementById('tfOutput').textContent = '';
+      return;
+    }
+    tfSetValidationError('');
 
     var pubSubs  = subs.filter(function(s) { return s.type === 'public'; });
     var privSubs = subs.filter(function(s) { return s.type === 'private'; });
