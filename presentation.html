@@ -1,0 +1,2217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Enterprise VPC CIDR Block Architecture</title>
+<style>
+  :root {
+    --primary: #232F3E;
+    --accent: #FF9900;
+    --accent2: #146EB4;
+    --light: #F5F7FA;
+    --text: #232F3E;
+    --green: #1B813E;
+    --red: #D13212;
+    --purple: #7B2D8E;
+    --blue-light: #E8F4FD;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--primary);
+    color: var(--text);
+    overflow: hidden;
+    height: 100vh;
+  }
+
+  .slide {
+    display: none;
+    width: 100vw;
+    height: 100vh;
+    padding: 50px 80px;
+    background: white;
+    position: relative;
+    overflow-y: auto;
+  }
+
+  .slide.active { display: flex; flex-direction: column; }
+
+  .slide.title-slide {
+    background: linear-gradient(135deg, var(--primary) 0%, #37475A 100%);
+    color: white;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+  }
+  .slide.title-slide h1 {
+    font-size: 3.2em;
+    font-weight: 700;
+    margin-bottom: 16px;
+    letter-spacing: -1px;
+  }
+  .slide.title-slide .accent-bar {
+    width: 120px; height: 5px;
+    background: var(--accent);
+    margin: 20px auto;
+    border-radius: 3px;
+  }
+  .slide.title-slide .subtitle {
+    font-size: 1.4em;
+    color: #AAB7C4;
+    margin-top: 10px;
+  }
+  .slide.title-slide .meta {
+    margin-top: 40px;
+    font-size: 1em;
+    color: #8899AA;
+  }
+
+  h2 {
+    font-size: 1.9em;
+    color: var(--primary);
+    margin-bottom: 6px;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 10px;
+    display: inline-block;
+  }
+  h3 { font-size: 1.3em; color: var(--accent2); margin: 18px 0 10px; }
+  .slide-body { flex: 1; padding-top: 20px; overflow-y: auto; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 0.92em;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    padding: 12px 16px;
+    text-align: left;
+    font-weight: 600;
+  }
+  td {
+    padding: 10px 16px;
+    border-bottom: 1px solid #E5E9EF;
+  }
+  tr:nth-child(even) { background: #F8F9FB; }
+  tr:hover { background: var(--blue-light); }
+  .mono { font-family: 'Cascadia Code', 'Consolas', monospace; font-size: 0.95em; }
+
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; margin: 15px 0; }
+  .card {
+    background: var(--light);
+    border-radius: 10px;
+    padding: 24px;
+    border-left: 5px solid var(--accent);
+    transition: transform 0.2s;
+  }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+  .card.blue { border-left-color: var(--accent2); }
+  .card.green { border-left-color: var(--green); }
+  .card.purple { border-left-color: var(--purple); }
+  .card.red { border-left-color: var(--red); }
+  .card h4 { font-size: 1.1em; color: var(--primary); margin-bottom: 8px; }
+  .card p, .card ul { font-size: 0.92em; color: #555; line-height: 1.6; }
+  .card ul { padding-left: 18px; }
+
+  .env-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 15px 0; }
+  .env-card {
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    color: white;
+    font-weight: 600;
+  }
+  .env-dev { background: linear-gradient(135deg, #2E7D32, #4CAF50); }
+  .env-staging { background: linear-gradient(135deg, #E65100, #FF9800); }
+  .env-uat { background: linear-gradient(135deg, #4A148C, #9C27B0); }
+  .env-prod { background: linear-gradient(135deg, #B71C1C, #F44336); }
+  .env-card .cidr { font-size: 1.5em; margin: 8px 0; font-family: 'Cascadia Code', monospace; }
+  .env-card .label { font-size: 0.85em; opacity: 0.9; }
+
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 15px 0;
+    padding: 20px;
+    background: #FAFBFC;
+    border-radius: 12px;
+    border: 1px solid #E5E9EF;
+  }
+  .tier-row {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .tier-label {
+    width: 160px;
+    font-weight: 700;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    text-align: right;
+    padding-right: 15px;
+    flex-shrink: 0;
+  }
+  .tier-label.public { color: var(--green); }
+  .tier-label.app { color: var(--accent2); }
+  .tier-label.db { color: var(--red); }
+  .tier-label.reserved { color: #999; }
+  .subnet-box {
+    flex: 1;
+    padding: 14px;
+    border-radius: 8px;
+    text-align: center;
+    font-size: 0.88em;
+    font-weight: 600;
+  }
+  .subnet-box.public { background: #E8F5E9; color: #2E7D32; border: 1px solid #A5D6A7; }
+  .subnet-box.app { background: #E3F2FD; color: #1565C0; border: 1px solid #90CAF9; }
+  .subnet-box.db { background: #FBE9E7; color: #BF360C; border: 1px solid #FFAB91; }
+  .subnet-box.reserved { background: #F5F5F5; color: #999; border: 1px dashed #CCC; }
+  .subnet-box .cidr-val { font-family: 'Cascadia Code', monospace; display: block; margin-top: 4px; font-weight: 400; font-size: 0.9em; }
+
+  ul.bullets { padding-left: 22px; line-height: 1.8; font-size: 1em; }
+  ul.bullets li { margin-bottom: 6px; }
+
+  .tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-right: 4px;
+  }
+  .tag.public { background: #E8F5E9; color: #2E7D32; }
+  .tag.private { background: #E3F2FD; color: #1565C0; }
+  .tag.isolated { background: #FBE9E7; color: #BF360C; }
+
+  .highlight-box {
+    background: linear-gradient(135deg, #FFF8E1, #FFFDE7);
+    border: 1px solid #FFE082;
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin: 12px 0;
+    font-size: 0.95em;
+  }
+  .highlight-box strong { color: var(--accent); }
+
+  .slide-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 12px;
+    border-top: 1px solid #E5E9EF;
+    font-size: 0.8em;
+    color: #AAA;
+    flex-shrink: 0;
+  }
+
+  .nav {
+    position: fixed;
+    bottom: 20px;
+    right: 30px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+  .nav button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.95em;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+  .nav button:hover { background: var(--accent2); }
+  .nav button:disabled { background: #CCC; cursor: default; }
+
+  .slide-counter {
+    position: fixed;
+    bottom: 25px;
+    left: 30px;
+    font-size: 0.85em;
+    color: #AAA;
+    z-index: 100;
+  }
+
+  .flow-arrow {
+    text-align: center;
+    color: #CCC;
+    font-size: 1.5em;
+    margin: 4px 0;
+  }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; }
+
+  .rule-block {
+    background: var(--light);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 8px 0;
+  }
+  .rule-block h4 { margin-bottom: 8px; }
+  .rule-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px solid #E5E9EF;
+    font-size: 0.9em;
+  }
+  .rule-item:last-child { border-bottom: none; }
+  .allow { color: var(--green); font-weight: 600; }
+  .deny { color: var(--red); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- SLIDE 1: Title -->
+<div class="slide title-slide active" id="slide-1">
+  <div>
+    <h1>Enterprise VPC<br>CIDR Block Architecture</h1>
+    <div class="accent-bar"></div>
+    <div class="subtitle">Production-Ready Network Design for AWS</div>
+    <div class="meta">4 Environments &bull; 2 Availability Zones &bull; 3-Tier Isolation<br><br>Confidential &mdash; Internal Use Only</div>
+  </div>
+</div>
+
+<!-- SLIDE 2: Agenda -->
+<div class="slide" id="slide-2">
+  <h2>Agenda</h2>
+  <div class="slide-body">
+    <div class="card-grid" style="grid-template-columns: 1fr 1fr;">
+      <div class="card">
+        <h4>1. Design Principles</h4>
+        <p>Key goals driving the architecture decisions</p>
+      </div>
+      <div class="card blue">
+        <h4>2. Supernet Allocation</h4>
+        <p>How the 10.0.0.0/8 space is divided across environments</p>
+      </div>
+      <div class="card green">
+        <h4>3. Subnet Design Pattern</h4>
+        <p>The repeatable 3-tier layout used inside every VPC</p>
+      </div>
+      <div class="card purple">
+        <h4>4. Per-Environment CIDR Maps</h4>
+        <p>Full address tables for Dev, Staging, UAT, and Production</p>
+      </div>
+      <div class="card">
+        <h4>5. Security Architecture</h4>
+        <p>Security Groups and traffic flow per tier</p>
+      </div>
+      <div class="card blue">
+        <h4>6. Routing Architecture</h4>
+        <p>Route tables, IGW, NAT Gateway, and traffic flow</p>
+      </div>
+      <div class="card green">
+        <h4>7. High Availability</h4>
+        <p>Multi-AZ strategy and failover capabilities</p>
+      </div>
+      <div class="card purple">
+        <h4>8. Address Space Summary</h4>
+        <p>Utilization stats and reserved ranges</p>
+      </div>
+      <div class="card">
+        <h4>9. Implementation Roadmap</h4>
+        <p>4-phase rollout timeline overview</p>
+      </div>
+      <div class="card blue">
+        <h4>10. Phase 1&ndash;4 Deep Dives</h4>
+        <p>Step-by-step implementation details for each phase</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 3: Design Principles -->
+<div class="slide" id="slide-3">
+  <h2>Design Principles</h2>
+  <div class="slide-body">
+    <div class="card-grid">
+      <div class="card">
+        <h4>Zero Overlap</h4>
+        <p>Every VPC uses a unique /16 range. All environments can be connected via VPC Peering or Transit Gateway without any CIDR conflicts.</p>
+      </div>
+      <div class="card blue">
+        <h4>Predictable Addressing</h4>
+        <p>Given any IP address, you can instantly identify the <strong>environment</strong>, <strong>tier</strong>, and <strong>AZ</strong> from the octets alone. No documentation lookup needed.</p>
+      </div>
+      <div class="card green">
+        <h4>Scalable by Design</h4>
+        <p>Each VPC uses only ~3% of its address space. Reserved ranges allow adding AZs, tiers, or larger subnets without re-addressing.</p>
+      </div>
+      <div class="card purple">
+        <h4>Defense in Depth</h4>
+        <p>Three isolation tiers (Public, App, DB) with independent security groups, NACLs, and route tables. Traffic flows in one direction only.</p>
+      </div>
+      <div class="card">
+        <h4>Consistent Across Environments</h4>
+        <p>Same internal subnet layout in Dev, Staging, UAT, and Production. Only the second octet changes, reducing operational mistakes.</p>
+      </div>
+      <div class="card blue">
+        <h4>Future-Proof</h4>
+        <p>97% of address space is unallocated per VPC. Room for EKS pod CIDRs, VPN ranges, new regions, and acquired company networks.</p>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 4: Supernet Allocation -->
+<div class="slide" id="slide-4">
+  <h2>Supernet &amp; Per-Environment VPC Allocation</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>Supernet:</strong> The entire organization operates within <span class="mono">10.0.0.0/8</span>. Each environment receives a dedicated <span class="mono">/16</span> block with a memorable second octet spaced by 10.
+    </div>
+    <div class="env-grid">
+      <div class="env-card env-dev">
+        <div class="label">Development</div>
+        <div class="cidr">10.10.0.0/16</div>
+        <div class="label">65,536 IPs</div>
+      </div>
+      <div class="env-card env-staging">
+        <div class="label">Staging</div>
+        <div class="cidr">10.20.0.0/16</div>
+        <div class="label">65,536 IPs</div>
+      </div>
+      <div class="env-card env-uat">
+        <div class="label">UAT</div>
+        <div class="cidr">10.30.0.0/16</div>
+        <div class="label">65,536 IPs</div>
+      </div>
+      <div class="env-card env-prod">
+        <div class="label">Production</div>
+        <div class="cidr">10.40.0.0/16</div>
+        <div class="label">65,536 IPs</div>
+      </div>
+    </div>
+    <h3>Full Allocation Map</h3>
+    <table>
+      <tr><th>Environment</th><th>VPC CIDR</th><th>IP Range</th><th>Total IPs</th><th>Status</th></tr>
+      <tr><td><strong>Dev</strong></td><td class="mono">10.10.0.0/16</td><td class="mono">10.10.0.0 &ndash; 10.10.255.255</td><td>65,536</td><td><span class="tag public">Active</span></td></tr>
+      <tr><td><strong>Staging</strong></td><td class="mono">10.20.0.0/16</td><td class="mono">10.20.0.0 &ndash; 10.20.255.255</td><td>65,536</td><td><span class="tag public">Active</span></td></tr>
+      <tr><td><strong>UAT</strong></td><td class="mono">10.30.0.0/16</td><td class="mono">10.30.0.0 &ndash; 10.30.255.255</td><td>65,536</td><td><span class="tag public">Active</span></td></tr>
+      <tr><td><strong>Production</strong></td><td class="mono">10.40.0.0/16</td><td class="mono">10.40.0.0 &ndash; 10.40.255.255</td><td>65,536</td><td><span class="tag public">Active</span></td></tr>
+      <tr style="color:#999"><td>Reserved</td><td class="mono">10.50.0.0/16 &ndash; 10.250.0.0/16</td><td class="mono">10.50.0.0 &ndash; 10.250.255.255</td><td>~13M</td><td><span class="tag" style="background:#F5F5F5;color:#999">Future</span></td></tr>
+    </table>
+    <div class="highlight-box">
+      <strong>Why gaps?</strong> Ranges 10.11&ndash;19, 10.21&ndash;29, 10.31&ndash;39 are reserved for secondary VPCs, DR regions, or future acquisitions.
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 5: Subnet Design Pattern -->
+<div class="slide" id="slide-5">
+  <h2>Subnet Design Pattern</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>The Formula:</strong> Every IP follows the pattern <span class="mono" style="font-size:1.1em">10.<em>ENV</em>.<em>TIER</em>.<em>HOST</em></span> &mdash; making any address instantly readable.
+    </div>
+    <div class="two-col">
+      <div>
+        <h3>Octet Breakdown</h3>
+        <table>
+          <tr><th>Octet</th><th>Meaning</th><th>Values</th></tr>
+          <tr><td>1st</td><td>Organization</td><td class="mono">10</td></tr>
+          <tr><td>2nd</td><td>Environment</td><td class="mono">10=Dev, 20=Stg, 30=UAT, 40=Prod</td></tr>
+          <tr><td>3rd</td><td>Tier + AZ</td><td class="mono">1-2=Public, 16-17=App, 32-33=DB</td></tr>
+          <tr><td>4th</td><td>Host</td><td class="mono">1&ndash;254</td></tr>
+        </table>
+        <h3 style="margin-top:24px">Quick Decode Example</h3>
+        <div class="rule-block">
+          <div class="rule-item"><span>IP: <span class="mono">10.30.17.42</span></span></div>
+          <div class="rule-item"><span>2nd octet = 30</span><span><strong>UAT</strong></span></div>
+          <div class="rule-item"><span>3rd octet = 17</span><span><strong>App Tier, AZ-2</strong></span></div>
+          <div class="rule-item"><span>4th octet = 42</span><span><strong>Host #42</strong></span></div>
+        </div>
+      </div>
+      <div>
+        <h3>Internal Subnet Layout (per VPC)</h3>
+        <div class="arch-diagram">
+          <div class="tier-row">
+            <div class="tier-label public">Public</div>
+            <div class="subnet-box public">AZ-1<span class="cidr-val">10.ENV.1.0/24</span></div>
+            <div class="subnet-box public">AZ-2<span class="cidr-val">10.ENV.2.0/24</span></div>
+          </div>
+          <div class="flow-arrow">&darr; &darr;</div>
+          <div class="tier-row">
+            <div class="tier-label app">App Private</div>
+            <div class="subnet-box app">AZ-1<span class="cidr-val">10.ENV.16.0/24</span></div>
+            <div class="subnet-box app">AZ-2<span class="cidr-val">10.ENV.17.0/24</span></div>
+          </div>
+          <div class="flow-arrow">&darr; &darr;</div>
+          <div class="tier-row">
+            <div class="tier-label db">DB Private</div>
+            <div class="subnet-box db">AZ-1<span class="cidr-val">10.ENV.32.0/24</span></div>
+            <div class="subnet-box db">AZ-2<span class="cidr-val">10.ENV.33.0/24</span></div>
+          </div>
+          <div class="tier-row" style="margin-top:8px">
+            <div class="tier-label reserved">Reserved</div>
+            <div class="subnet-box reserved" style="flex:2">10.ENV.48.0 &ndash; 10.ENV.255.0 (~53,000 IPs)</div>
+          </div>
+        </div>
+        <div style="font-size:0.85em;color:#888;margin-top:8px">Each /24 = 251 usable IPs (AWS reserves 5 per subnet)</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 6: Full CIDR Map - Dev & Staging -->
+<div class="slide" id="slide-6">
+  <h2>CIDR Map &mdash; Dev &amp; Staging</h2>
+  <div class="slide-body">
+    <div class="two-col">
+      <div>
+        <h3 style="color:#2E7D32">DEV &mdash; 10.10.0.0/16</h3>
+        <table>
+          <tr><th>Subnet</th><th>CIDR</th><th>AZ</th><th>Type</th></tr>
+          <tr><td>public-az1</td><td class="mono">10.10.1.0/24</td><td>AZ-1</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>public-az2</td><td class="mono">10.10.2.0/24</td><td>AZ-2</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>app-private-az1</td><td class="mono">10.10.16.0/24</td><td>AZ-1</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>app-private-az2</td><td class="mono">10.10.17.0/24</td><td>AZ-2</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>db-private-az1</td><td class="mono">10.10.32.0/24</td><td>AZ-1</td><td><span class="tag isolated">Isolated</span></td></tr>
+          <tr><td>db-private-az2</td><td class="mono">10.10.33.0/24</td><td>AZ-2</td><td><span class="tag isolated">Isolated</span></td></tr>
+        </table>
+        <div style="font-size:0.85em;color:#888;margin-top:6px">Reserved: 10.10.3&ndash;15, 10.10.18&ndash;31, 10.10.34&ndash;255</div>
+      </div>
+      <div>
+        <h3 style="color:#E65100">STAGING &mdash; 10.20.0.0/16</h3>
+        <table>
+          <tr><th>Subnet</th><th>CIDR</th><th>AZ</th><th>Type</th></tr>
+          <tr><td>public-az1</td><td class="mono">10.20.1.0/24</td><td>AZ-1</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>public-az2</td><td class="mono">10.20.2.0/24</td><td>AZ-2</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>app-private-az1</td><td class="mono">10.20.16.0/24</td><td>AZ-1</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>app-private-az2</td><td class="mono">10.20.17.0/24</td><td>AZ-2</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>db-private-az1</td><td class="mono">10.20.32.0/24</td><td>AZ-1</td><td><span class="tag isolated">Isolated</span></td></tr>
+          <tr><td>db-private-az2</td><td class="mono">10.20.33.0/24</td><td>AZ-2</td><td><span class="tag isolated">Isolated</span></td></tr>
+        </table>
+        <div style="font-size:0.85em;color:#888;margin-top:6px">Reserved: 10.20.3&ndash;15, 10.20.18&ndash;31, 10.20.34&ndash;255</div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 7: Full CIDR Map - UAT & Prod -->
+<div class="slide" id="slide-7">
+  <h2>CIDR Map &mdash; UAT &amp; Production</h2>
+  <div class="slide-body">
+    <div class="two-col">
+      <div>
+        <h3 style="color:#4A148C">UAT &mdash; 10.30.0.0/16</h3>
+        <table>
+          <tr><th>Subnet</th><th>CIDR</th><th>AZ</th><th>Type</th></tr>
+          <tr><td>public-az1</td><td class="mono">10.30.1.0/24</td><td>AZ-1</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>public-az2</td><td class="mono">10.30.2.0/24</td><td>AZ-2</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>app-private-az1</td><td class="mono">10.30.16.0/24</td><td>AZ-1</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>app-private-az2</td><td class="mono">10.30.17.0/24</td><td>AZ-2</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>db-private-az1</td><td class="mono">10.30.32.0/24</td><td>AZ-1</td><td><span class="tag isolated">Isolated</span></td></tr>
+          <tr><td>db-private-az2</td><td class="mono">10.30.33.0/24</td><td>AZ-2</td><td><span class="tag isolated">Isolated</span></td></tr>
+        </table>
+        <div style="font-size:0.85em;color:#888;margin-top:6px">Reserved: 10.30.3&ndash;15, 10.30.18&ndash;31, 10.30.34&ndash;255</div>
+      </div>
+      <div>
+        <h3 style="color:#B71C1C">PRODUCTION &mdash; 10.40.0.0/16</h3>
+        <table>
+          <tr><th>Subnet</th><th>CIDR</th><th>AZ</th><th>Type</th></tr>
+          <tr><td>public-az1</td><td class="mono">10.40.1.0/24</td><td>AZ-1</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>public-az2</td><td class="mono">10.40.2.0/24</td><td>AZ-2</td><td><span class="tag public">Public</span></td></tr>
+          <tr><td>app-private-az1</td><td class="mono">10.40.16.0/24</td><td>AZ-1</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>app-private-az2</td><td class="mono">10.40.17.0/24</td><td>AZ-2</td><td><span class="tag private">Private</span></td></tr>
+          <tr><td>db-private-az1</td><td class="mono">10.40.32.0/24</td><td>AZ-1</td><td><span class="tag isolated">Isolated</span></td></tr>
+          <tr><td>db-private-az2</td><td class="mono">10.40.33.0/24</td><td>AZ-2</td><td><span class="tag isolated">Isolated</span></td></tr>
+        </table>
+        <div style="font-size:0.85em;color:#888;margin-top:6px">Reserved: 10.40.3&ndash;15, 10.40.18&ndash;31, 10.40.34&ndash;255</div>
+      </div>
+    </div>
+    <div class="highlight-box" style="margin-top:18px">
+      <strong>Total across all environments:</strong> 24 subnets &bull; 6,024 usable IPs allocated &bull; ~256,000 IPs reserved for growth
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 8: Security Architecture -->
+<div class="slide" id="slide-8">
+  <h2>Security Architecture</h2>
+  <div class="slide-body">
+    <h3>Security Groups (Stateful Firewalls per Tier)</h3>
+    <div class="card-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+      <div class="card green">
+        <h4>web-tier-sg</h4>
+        <div class="rule-block">
+          <h4 style="font-size:0.85em">Inbound Rules</h4>
+          <div class="rule-item"><span>HTTP (80)</span><span class="allow">0.0.0.0/0</span></div>
+          <div class="rule-item"><span>HTTPS (443)</span><span class="allow">0.0.0.0/0</span></div>
+          <div class="rule-item"><span>SSH (22)</span><span class="allow">Admin IP only</span></div>
+        </div>
+      </div>
+      <div class="card blue">
+        <h4>app-tier-sg</h4>
+        <div class="rule-block">
+          <h4 style="font-size:0.85em">Inbound Rules</h4>
+          <div class="rule-item"><span>App (8080)</span><span class="allow">web-tier-sg</span></div>
+          <div class="rule-item"><span>SSH (22)</span><span class="allow">web-tier-sg</span></div>
+          <div class="rule-item"><span>All other</span><span class="deny">DENIED</span></div>
+        </div>
+      </div>
+      <div class="card red">
+        <h4>db-tier-sg</h4>
+        <div class="rule-block">
+          <h4 style="font-size:0.85em">Inbound Rules</h4>
+          <div class="rule-item"><span>MySQL (3306)</span><span class="allow">app-tier-sg</span></div>
+          <div class="rule-item"><span>All other</span><span class="deny">DENIED</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Traffic Flow Direction</h3>
+    <div class="arch-diagram" style="flex-direction:row; align-items:center; justify-content:center; gap:20px; padding:24px;">
+      <div style="text-align:center;font-weight:700;font-size:1.1em">Internet</div>
+      <div style="font-size:1.5em;color:var(--green)">&rarr;</div>
+      <div class="subnet-box public" style="flex:none;padding:16px 24px">ALB + Web Tier<br><span style="font-size:0.8em;font-weight:400">Ports 80, 443</span></div>
+      <div style="font-size:1.5em;color:var(--accent2)">&rarr;</div>
+      <div class="subnet-box app" style="flex:none;padding:16px 24px">App Tier<br><span style="font-size:0.8em;font-weight:400">Port 8080</span></div>
+      <div style="font-size:1.5em;color:var(--red)">&rarr;</div>
+      <div class="subnet-box db" style="flex:none;padding:16px 24px">DB Tier<br><span style="font-size:0.8em;font-weight:400">Port 3306</span></div>
+    </div>
+    <div class="highlight-box">
+      <strong>Key principle:</strong> Each security group references the <em>previous tier's SG</em> as the source &mdash; not CIDR ranges. This way, rules remain valid even if subnets change.
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 9: Routing Architecture -->
+<div class="slide" id="slide-9">
+  <h2>Routing Architecture</h2>
+  <div class="slide-body">
+    <h3>Three Route Tables per VPC</h3>
+    <div class="card-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+      <div class="card green">
+        <h4>public-rt</h4>
+        <p>Associated with public subnets</p>
+        <div class="rule-block" style="margin-top:10px">
+          <div class="rule-item"><span class="mono">10.ENV.0.0/16</span><span>local</span></div>
+          <div class="rule-item"><span class="mono">0.0.0.0/0</span><span class="allow">Internet GW</span></div>
+        </div>
+      </div>
+      <div class="card blue">
+        <h4>app-private-rt</h4>
+        <p>Associated with app subnets</p>
+        <div class="rule-block" style="margin-top:10px">
+          <div class="rule-item"><span class="mono">10.ENV.0.0/16</span><span>local</span></div>
+          <div class="rule-item"><span class="mono">0.0.0.0/0</span><span class="allow">NAT GW</span></div>
+        </div>
+      </div>
+      <div class="card red">
+        <h4>db-private-rt</h4>
+        <p>Associated with DB subnets</p>
+        <div class="rule-block" style="margin-top:10px">
+          <div class="rule-item"><span class="mono">10.ENV.0.0/16</span><span>local</span></div>
+          <div class="rule-item"><span class="mono">0.0.0.0/0</span><span class="deny">NO ROUTE</span></div>
+        </div>
+      </div>
+    </div>
+
+    <h3>Gateway Architecture</h3>
+    <div class="arch-diagram" style="flex-direction:row; align-items:center; justify-content:center; gap:16px; padding:24px; flex-wrap: wrap;">
+      <div style="text-align:center;font-weight:700">Internet</div>
+      <div style="font-size:1.3em">&harr;</div>
+      <div class="subnet-box public" style="flex:none;padding:14px 20px"><strong>Internet Gateway</strong><br><span style="font-size:0.8em">Bidirectional</span></div>
+      <div style="font-size:1.3em">&harr;</div>
+      <div class="subnet-box public" style="flex:none;padding:14px 20px"><strong>Public Subnets</strong><br><span style="font-size:0.8em">ALB + NAT GW reside here</span></div>
+      <div style="font-size:1.3em">&rarr;</div>
+      <div class="subnet-box app" style="flex:none;padding:14px 20px"><strong>NAT Gateway</strong><br><span style="font-size:0.8em">Outbound only for App</span></div>
+      <div style="font-size:1.3em">&rarr;</div>
+      <div class="subnet-box app" style="flex:none;padding:14px 20px"><strong>App Subnets</strong><br><span style="font-size:0.8em">Updates via NAT</span></div>
+    </div>
+    <div class="highlight-box">
+      <strong>DB subnets have no internet route.</strong> They can only communicate within the VPC. This is the most secure tier &mdash; fully air-gapped from the internet.
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 10: High Availability -->
+<div class="slide" id="slide-10">
+  <h2>High Availability &amp; Resilience</h2>
+  <div class="slide-body">
+    <div class="two-col">
+      <div>
+        <h3>Multi-AZ Strategy</h3>
+        <div class="arch-diagram">
+          <div style="text-align:center;font-weight:700;margin-bottom:8px">Each VPC spans 2 Availability Zones</div>
+          <div class="tier-row">
+            <div class="tier-label" style="color:var(--accent2)">AZ-1</div>
+            <div class="subnet-box public">Public</div>
+            <div class="subnet-box app">App</div>
+            <div class="subnet-box db">DB Primary</div>
+          </div>
+          <div style="text-align:center;color:#CCC;font-size:0.9em;padding:4px 0">&#8597; Cross-AZ replication &amp; failover &#8597;</div>
+          <div class="tier-row">
+            <div class="tier-label" style="color:var(--accent2)">AZ-2</div>
+            <div class="subnet-box public">Public</div>
+            <div class="subnet-box app">App</div>
+            <div class="subnet-box db">DB Standby</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>Resilience Features</h3>
+        <div class="card green" style="margin-bottom:12px">
+          <h4>Application Load Balancer</h4>
+          <p>Spans both AZs, automatically routes around unhealthy instances. Health checks every 30 seconds.</p>
+        </div>
+        <div class="card blue" style="margin-bottom:12px">
+          <h4>Auto Scaling Groups</h4>
+          <p>App and Web tiers scale across AZs based on CPU/memory. Minimum 2 instances, max configurable.</p>
+        </div>
+        <div class="card red" style="margin-bottom:12px">
+          <h4>RDS Multi-AZ</h4>
+          <p>Synchronous standby in AZ-2. Automatic failover in under 60 seconds. No application changes required.</p>
+        </div>
+        <div class="card purple">
+          <h4>NAT Gateway HA</h4>
+          <p>Deployed in public subnet AZ-1. For full HA, add a second NAT GW in AZ-2 with per-AZ route tables.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 11: Address Space Summary -->
+<div class="slide" id="slide-11">
+  <h2>Address Space Utilization Summary</h2>
+  <div class="slide-body">
+    <table>
+      <tr><th>Category</th><th>Per VPC</th><th>All 4 VPCs</th><th>Notes</th></tr>
+      <tr><td>VPC Total Capacity</td><td class="mono">65,536 IPs</td><td class="mono">262,144 IPs</td><td>/16 per environment</td></tr>
+      <tr><td>Public Subnets (2)</td><td class="mono">502 usable</td><td class="mono">2,008</td><td>ALB, NAT GW, Bastion</td></tr>
+      <tr><td>App Private Subnets (2)</td><td class="mono">502 usable</td><td class="mono">2,008</td><td>EC2, ECS, Lambda</td></tr>
+      <tr><td>DB Private Subnets (2)</td><td class="mono">502 usable</td><td class="mono">2,008</td><td>RDS, ElastiCache</td></tr>
+      <tr style="font-weight:700"><td>Total Allocated</td><td class="mono">1,506 IPs</td><td class="mono">6,024 IPs</td><td>~2.3% of capacity</td></tr>
+      <tr style="font-weight:700;color:var(--green)"><td>Available for Growth</td><td class="mono">64,030 IPs</td><td class="mono">256,120 IPs</td><td>~97.7% remaining</td></tr>
+    </table>
+
+    <h3>Reserved Ranges (per VPC)</h3>
+    <table>
+      <tr><th>Range</th><th>Third Octet</th><th>Intended Use</th><th>Available Subnets</th></tr>
+      <tr><td>Public Reserve</td><td class="mono">3 &ndash; 15</td><td>Future public subnets, VPN, bastion</td><td>13 x /24</td></tr>
+      <tr><td>App Reserve</td><td class="mono">18 &ndash; 31</td><td>More app subnets, larger /22 blocks, EKS pods</td><td>14 x /24 or 3 x /22</td></tr>
+      <tr><td>DB Reserve</td><td class="mono">34 &ndash; 47</td><td>Cache tier, read replicas, analytics DB</td><td>14 x /24</td></tr>
+      <tr><td>Unallocated</td><td class="mono">48 &ndash; 255</td><td>Management, monitoring, new tiers</td><td>208 x /24</td></tr>
+    </table>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 12: Roadmap Overview -->
+<div class="slide" id="slide-12">
+  <h2>Implementation Roadmap &mdash; Overview</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>Approach:</strong> Roll out incrementally across 4 phases. Each phase builds on the previous, reducing risk and allowing validation before expanding to the next environment.
+    </div>
+    <div class="arch-diagram" style="flex-direction:row; align-items:stretch; justify-content:center; gap:0; padding:0; border:none; background:transparent;">
+      <div style="flex:1;background:linear-gradient(135deg,#E8F5E9,#C8E6C9);border-radius:10px 0 0 10px;padding:24px;text-align:center;">
+        <div style="font-size:0.8em;text-transform:uppercase;letter-spacing:1px;color:#2E7D32;font-weight:700;">Phase 1</div>
+        <div style="font-size:1.3em;font-weight:700;color:#1B5E20;margin:8px 0;">Foundation</div>
+        <div style="font-size:0.85em;color:#388E3C;">Week 1&ndash;2</div>
+        <div style="margin-top:12px;font-size:0.85em;color:#2E7D32;">Dev VPC + Terraform + Validate</div>
+      </div>
+      <div style="flex:1;background:linear-gradient(135deg,#E3F2FD,#BBDEFB);padding:24px;text-align:center;">
+        <div style="font-size:0.8em;text-transform:uppercase;letter-spacing:1px;color:#1565C0;font-weight:700;">Phase 2</div>
+        <div style="font-size:1.3em;font-weight:700;color:#0D47A1;margin:8px 0;">Expand</div>
+        <div style="font-size:0.85em;color:#1976D2;">Week 3&ndash;4</div>
+        <div style="margin-top:12px;font-size:0.85em;color:#1565C0;">Staging + UAT + Transit GW</div>
+      </div>
+      <div style="flex:1;background:linear-gradient(135deg,#FFF3E0,#FFE0B2);padding:24px;text-align:center;">
+        <div style="font-size:0.8em;text-transform:uppercase;letter-spacing:1px;color:#E65100;font-weight:700;">Phase 3</div>
+        <div style="font-size:1.3em;font-weight:700;color:#BF360C;margin:8px 0;">Production</div>
+        <div style="font-size:0.85em;color:#E65100;">Week 5&ndash;6</div>
+        <div style="margin-top:12px;font-size:0.85em;color:#E65100;">Prod VPC + Multi-AZ + ASG</div>
+      </div>
+      <div style="flex:1;background:linear-gradient(135deg,#F3E5F5,#E1BEE7);border-radius:0 10px 10px 0;padding:24px;text-align:center;">
+        <div style="font-size:0.8em;text-transform:uppercase;letter-spacing:1px;color:#6A1B9A;font-weight:700;">Phase 4</div>
+        <div style="font-size:1.3em;font-weight:700;color:#4A148C;margin:8px 0;">Harden</div>
+        <div style="font-size:0.85em;color:#7B1FA2;">Week 7&ndash;8</div>
+        <div style="margin-top:12px;font-size:0.85em;color:#6A1B9A;">Security + Monitoring + Optimize</div>
+      </div>
+    </div>
+    <h3>Phase Dependencies</h3>
+    <table>
+      <tr><th>Phase</th><th>Environment</th><th>Duration</th><th>Prerequisites</th><th>Deliverables</th></tr>
+      <tr><td><strong>Phase 1</strong></td><td>Dev</td><td>2 weeks</td><td>AWS account, Terraform, key pair</td><td>Working Dev VPC, validated 3-tier connectivity</td></tr>
+      <tr><td><strong>Phase 2</strong></td><td>Staging + UAT</td><td>2 weeks</td><td>Phase 1 complete and validated</td><td>3 VPCs connected via Transit Gateway</td></tr>
+      <tr><td><strong>Phase 3</strong></td><td>Production</td><td>2 weeks</td><td>Phase 2 complete, change approval</td><td>Production VPC with HA and Auto Scaling</td></tr>
+      <tr><td><strong>Phase 4</strong></td><td>All</td><td>2 weeks</td><td>Phase 3 complete</td><td>Monitoring, compliance, cost optimization</td></tr>
+    </table>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 13: Phase 1 - Foundation -->
+<div class="slide" id="slide-13">
+  <h2>Phase 1 &mdash; Foundation (Dev VPC)</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>Goal:</strong> Deploy the Dev VPC as the first environment using Terraform. Validate the entire 3-tier architecture works end-to-end before expanding.
+    </div>
+    <div class="two-col">
+      <div>
+        <h3>Step-by-Step Implementation</h3>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 1.1 &mdash; Set Up Terraform Project</h4>
+          <ul>
+            <li>Install Terraform >= 1.5 and configure AWS CLI credentials</li>
+            <li>Create project structure: <span class="mono">versions.tf</span>, <span class="mono">variables.tf</span>, <span class="mono">network.tf</span></li>
+            <li>Define <span class="mono">environment</span> variable (second octet: <span class="mono">10</span> for Dev)</li>
+            <li>Store state in S3 backend with DynamoDB locking</li>
+          </ul>
+        </div>
+        <div class="card blue" style="margin-bottom:10px">
+          <h4>Step 1.2 &mdash; Create VPC + Subnets</h4>
+          <ul>
+            <li>VPC: <span class="mono">10.10.0.0/16</span> with DNS hostnames enabled</li>
+            <li>Create 6 subnets across 2 AZs using the tiered CIDR scheme</li>
+            <li>Enable auto-assign public IP on public subnets only</li>
+            <li>Tag every resource with <span class="mono">Environment=dev</span> and <span class="mono">Tier=web|app|db</span></li>
+          </ul>
+        </div>
+        <div class="card green" style="margin-bottom:10px">
+          <h4>Step 1.3 &mdash; Internet Gateway + NAT Gateway</h4>
+          <ul>
+            <li>Create and attach IGW to the VPC</li>
+            <li>Allocate Elastic IP for NAT Gateway</li>
+            <li>Deploy NAT Gateway in <span class="mono">public-az1</span></li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="card purple" style="margin-bottom:10px">
+          <h4>Step 1.4 &mdash; Route Tables</h4>
+          <ul>
+            <li><span class="mono">public-rt</span>: <span class="mono">0.0.0.0/0 &rarr; IGW</span>, associate with public subnets</li>
+            <li><span class="mono">app-private-rt</span>: <span class="mono">0.0.0.0/0 &rarr; NAT GW</span>, associate with app subnets</li>
+            <li><span class="mono">db-private-rt</span>: local only (no internet route), associate with DB subnets</li>
+          </ul>
+        </div>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 1.5 &mdash; Security Groups</h4>
+          <ul>
+            <li><span class="mono">web-tier-sg</span>: HTTP/HTTPS from <span class="mono">0.0.0.0/0</span>, SSH from admin IP</li>
+            <li><span class="mono">app-tier-sg</span>: Port 8080 + SSH from <span class="mono">web-tier-sg</span> only</li>
+            <li><span class="mono">db-tier-sg</span>: Port 3306 from <span class="mono">app-tier-sg</span> only</li>
+          </ul>
+        </div>
+        <div class="card red" style="margin-bottom:10px">
+          <h4>Step 1.6 &mdash; Validate</h4>
+          <ul>
+            <li>Run <span class="mono">terraform plan</span> and <span class="mono">terraform apply</span></li>
+            <li>Launch test EC2 in each tier; verify SSH hop chain works</li>
+            <li>Confirm DB subnet has no internet access</li>
+            <li>Confirm app subnet reaches internet only via NAT</li>
+          </ul>
+        </div>
+        <div class="highlight-box">
+          <strong>Exit Criteria:</strong> All 6 subnets created, 3 route tables verified, security group chaining validated, SSH hop working end-to-end.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture &mdash; Phase 1</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 14: Phase 2 - Expand -->
+<div class="slide" id="slide-14">
+  <h2>Phase 2 &mdash; Expand (Staging + UAT)</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>Goal:</strong> Replicate the validated Dev VPC to Staging and UAT environments. Connect all three VPCs via AWS Transit Gateway for cross-environment communication.
+    </div>
+    <div class="two-col">
+      <div>
+        <h3>Step-by-Step Implementation</h3>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 2.1 &mdash; Parameterize Terraform Module</h4>
+          <ul>
+            <li>Refactor Dev Terraform code into a reusable <strong>module</strong></li>
+            <li>Parameterize the environment octet: <span class="mono">var.env_octet</span> (<span class="mono">20</span> = Staging, <span class="mono">30</span> = UAT)</li>
+            <li>Create <span class="mono">staging.tfvars</span> and <span class="mono">uat.tfvars</span> with environment-specific values</li>
+            <li>Use Terraform workspaces or separate state files per environment</li>
+          </ul>
+        </div>
+        <div class="card blue" style="margin-bottom:10px">
+          <h4>Step 2.2 &mdash; Deploy Staging VPC</h4>
+          <ul>
+            <li>VPC: <span class="mono">10.20.0.0/16</span></li>
+            <li>Run <span class="mono">terraform apply -var-file=staging.tfvars</span></li>
+            <li>Verify same subnet layout: <span class="mono">10.20.1-2, 10.20.16-17, 10.20.32-33</span></li>
+            <li>Validate security groups and route tables</li>
+          </ul>
+        </div>
+        <div class="card green" style="margin-bottom:10px">
+          <h4>Step 2.3 &mdash; Deploy UAT VPC</h4>
+          <ul>
+            <li>VPC: <span class="mono">10.30.0.0/16</span></li>
+            <li>Run <span class="mono">terraform apply -var-file=uat.tfvars</span></li>
+            <li>Verify same subnet layout: <span class="mono">10.30.1-2, 10.30.16-17, 10.30.32-33</span></li>
+            <li>Validate security groups and route tables</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="card purple" style="margin-bottom:10px">
+          <h4>Step 2.4 &mdash; Create Transit Gateway</h4>
+          <ul>
+            <li>Create AWS Transit Gateway in the shared region</li>
+            <li>Create TGW attachments for Dev, Staging, and UAT VPCs</li>
+            <li>Update route tables in each VPC to route cross-VPC traffic via TGW:
+              <br><span class="mono">10.10.0.0/16 &rarr; TGW</span> (from Staging/UAT)
+              <br><span class="mono">10.20.0.0/16 &rarr; TGW</span> (from Dev/UAT)
+              <br><span class="mono">10.30.0.0/16 &rarr; TGW</span> (from Dev/Staging)
+            </li>
+          </ul>
+        </div>
+        <div class="card red" style="margin-bottom:10px">
+          <h4>Step 2.5 &mdash; CI/CD Pipeline Integration</h4>
+          <ul>
+            <li>Set up Terraform CI/CD pipeline (GitHub Actions / GitLab CI / Jenkins)</li>
+            <li>Implement <span class="mono">plan</span> on PR, <span class="mono">apply</span> on merge to main</li>
+            <li>Add <span class="mono">tflint</span> and <span class="mono">tfsec</span> for static analysis</li>
+            <li>Enforce PR review before any infrastructure changes</li>
+          </ul>
+        </div>
+        <div class="highlight-box">
+          <strong>Exit Criteria:</strong> 3 VPCs running with identical layouts, Transit Gateway connecting them, CI/CD pipeline deploying Terraform automatically.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture &mdash; Phase 2</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 15: Phase 3 - Production -->
+<div class="slide" id="slide-15">
+  <h2>Phase 3 &mdash; Production Deployment</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>Goal:</strong> Deploy the Production VPC with full high availability, auto scaling, multi-AZ database, and load balancing. This is the most critical phase and requires change management approval.
+    </div>
+    <div class="two-col">
+      <div>
+        <h3>Step-by-Step Implementation</h3>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 3.1 &mdash; Deploy Production VPC</h4>
+          <ul>
+            <li>VPC: <span class="mono">10.40.0.0/16</span></li>
+            <li>Run <span class="mono">terraform apply -var-file=prod.tfvars</span></li>
+            <li>Verify subnet layout: <span class="mono">10.40.1-2, 10.40.16-17, 10.40.32-33</span></li>
+            <li>Attach to existing Transit Gateway</li>
+          </ul>
+        </div>
+        <div class="card blue" style="margin-bottom:10px">
+          <h4>Step 3.2 &mdash; Application Load Balancer</h4>
+          <ul>
+            <li>Create internet-facing ALB in both public subnets</li>
+            <li>Configure HTTP (80) and HTTPS (443) listeners</li>
+            <li>Create target groups with health checks (path: <span class="mono">/health</span>, interval: 30s)</li>
+            <li>Attach ACM SSL certificate for HTTPS</li>
+          </ul>
+        </div>
+        <div class="card green" style="margin-bottom:10px">
+          <h4>Step 3.3 &mdash; Auto Scaling Groups</h4>
+          <ul>
+            <li>Create launch templates for web and app instances</li>
+            <li>Web ASG: min=2, max=6, desired=2 across both public subnets</li>
+            <li>App ASG: min=2, max=8, desired=2 across both app subnets</li>
+            <li>Scaling policies: target CPU at 60%, scale-out cooldown 300s</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <div class="card purple" style="margin-bottom:10px">
+          <h4>Step 3.4 &mdash; RDS Multi-AZ Database</h4>
+          <ul>
+            <li>Create DB subnet group with both DB subnets</li>
+            <li>Deploy RDS MySQL/PostgreSQL with <strong>Multi-AZ enabled</strong></li>
+            <li>Instance class: <span class="mono">db.r6g.large</span> (production-grade)</li>
+            <li>Enable automated backups (retention: 7 days), encryption at rest (KMS)</li>
+            <li>Enable Performance Insights and Enhanced Monitoring</li>
+          </ul>
+        </div>
+        <div class="card red" style="margin-bottom:10px">
+          <h4>Step 3.5 &mdash; NAT Gateway HA</h4>
+          <ul>
+            <li>Deploy a <strong>second NAT Gateway</strong> in <span class="mono">public-az2</span></li>
+            <li>Split <span class="mono">app-private-rt</span> into per-AZ route tables:
+              <br><span class="mono">app-private-rt-az1 &rarr; NAT GW AZ-1</span>
+              <br><span class="mono">app-private-rt-az2 &rarr; NAT GW AZ-2</span>
+            </li>
+            <li>Ensures outbound traffic survives a single AZ failure</li>
+          </ul>
+        </div>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 3.6 &mdash; DNS &amp; SSL</h4>
+          <ul>
+            <li>Create Route 53 hosted zone for the domain</li>
+            <li>Create alias record pointing to ALB DNS</li>
+            <li>Request ACM certificate with DNS validation</li>
+            <li>Add HTTP &rarr; HTTPS redirect rule on ALB</li>
+          </ul>
+        </div>
+        <div class="highlight-box">
+          <strong>Exit Criteria:</strong> Production VPC live, ALB serving HTTPS, ASGs scaling, RDS Multi-AZ with backups, dual NAT GWs for full HA.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture &mdash; Phase 3</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 16: Phase 4 - Harden -->
+<div class="slide" id="slide-16">
+  <h2>Phase 4 &mdash; Harden &amp; Optimize</h2>
+  <div class="slide-body">
+    <div class="highlight-box">
+      <strong>Goal:</strong> Add security monitoring, compliance guardrails, logging, and cost optimization across all 4 environments to meet enterprise production standards.
+    </div>
+    <div class="two-col">
+      <div>
+        <h3>Security &amp; Compliance</h3>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 4.1 &mdash; VPC Flow Logs</h4>
+          <ul>
+            <li>Enable VPC Flow Logs on all 4 VPCs</li>
+            <li>Send to CloudWatch Log Group with 30-day retention</li>
+            <li>Also archive to S3 for long-term audit (90 days+)</li>
+            <li>Create CloudWatch metric filters for rejected traffic</li>
+          </ul>
+        </div>
+        <div class="card blue" style="margin-bottom:10px">
+          <h4>Step 4.2 &mdash; GuardDuty &amp; Security Hub</h4>
+          <ul>
+            <li>Enable Amazon GuardDuty for threat detection</li>
+            <li>Enable AWS Security Hub with CIS Benchmark standard</li>
+            <li>Configure SNS alerts for high-severity findings</li>
+            <li>Set up automatic remediation for common findings</li>
+          </ul>
+        </div>
+        <div class="card green" style="margin-bottom:10px">
+          <h4>Step 4.3 &mdash; AWS Config Rules</h4>
+          <ul>
+            <li><span class="mono">vpc-sg-open-only-to-authorized-ports</span>: No open SGs</li>
+            <li><span class="mono">subnet-auto-assign-public-ip-disabled</span>: Private subnets only</li>
+            <li><span class="mono">rds-instance-public-access-check</span>: No public DB access</li>
+            <li><span class="mono">encrypted-volumes</span>: All EBS volumes encrypted</li>
+          </ul>
+        </div>
+      </div>
+      <div>
+        <h3>Monitoring &amp; Cost Optimization</h3>
+        <div class="card purple" style="margin-bottom:10px">
+          <h4>Step 4.4 &mdash; Centralized Logging</h4>
+          <ul>
+            <li>Enable AWS CloudTrail in all environments</li>
+            <li>Aggregate logs into a central S3 bucket</li>
+            <li>Set up Athena queries for security investigations</li>
+            <li>Create CloudWatch dashboards for each VPC</li>
+          </ul>
+        </div>
+        <div class="card red" style="margin-bottom:10px">
+          <h4>Step 4.5 &mdash; Network ACLs (Defense in Depth)</h4>
+          <ul>
+            <li>Add NACLs as a second layer of defense per subnet</li>
+            <li>Public NACLs: Allow 80, 443, 22, ephemeral ports; deny all else</li>
+            <li>App NACLs: Allow from <span class="mono">10.ENV.1-2.0/24</span> on app port only</li>
+            <li>DB NACLs: Allow from <span class="mono">10.ENV.16-17.0/24</span> on DB port only</li>
+          </ul>
+        </div>
+        <div class="card" style="margin-bottom:10px">
+          <h4>Step 4.6 &mdash; Cost Optimization</h4>
+          <ul>
+            <li>Enable AWS Cost Explorer and set budget alerts</li>
+            <li>Tag enforcement: all resources must have <span class="mono">Environment</span> + <span class="mono">Tier</span></li>
+            <li>Review NAT Gateway data charges (consider VPC endpoints for S3/DynamoDB)</li>
+            <li>Right-size instances after 2 weeks of CloudWatch metrics</li>
+            <li>Use Reserved Instances or Savings Plans for production</li>
+          </ul>
+        </div>
+        <div class="highlight-box">
+          <strong>Exit Criteria:</strong> Flow Logs on all VPCs, GuardDuty active, Config Rules enforced, CloudTrail logging, NACLs applied, cost baselines established.
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture &mdash; Phase 4</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 17: Interactive CIDR Calculator -->
+<div class="slide" id="slide-17">
+  <h2>Interactive CIDR Block Calculator</h2>
+  <div class="slide-body" style="overflow-y:auto;">
+    <div class="two-col" style="gap:24px;">
+
+      <!-- LEFT: Controls -->
+      <div>
+        <div class="highlight-box" style="margin-top:0;">
+          <strong>RFC 1918 Private IP Ranges (AWS VPC Allowed):</strong><br>
+          <span class="mono">10.0.0.0/8</span> &nbsp;|&nbsp; <span class="mono">172.16.0.0/12</span> &nbsp;|&nbsp; <span class="mono">192.168.0.0/16</span><br>
+          <span style="font-size:0.85em;color:#888;">AWS supports VPC CIDR prefix lengths from /16 to /28</span>
+        </div>
+
+        <!-- Step 1: Select environments -->
+        <div class="card" style="margin-bottom:14px;">
+          <h4>Step 1: Select Environments</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+              <input type="checkbox" id="envDev" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#4CAF50;cursor:pointer;">
+              <span style="font-weight:600;color:#2E7D32;">Dev</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+              <input type="checkbox" id="envStaging" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#FF9800;cursor:pointer;">
+              <span style="font-weight:600;color:#E65100;">Staging</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+              <input type="checkbox" id="envUAT" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#9C27B0;cursor:pointer;">
+              <span style="font-weight:600;color:#6A1B9A;">UAT</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+              <input type="checkbox" id="envProd" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#F44336;cursor:pointer;">
+              <span style="font-weight:600;color:#B71C1C;">Production</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+              <input type="checkbox" id="envShared" onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#146EB4;cursor:pointer;">
+              <span style="font-weight:600;color:#0D47A1;">Shared Services</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+              <input type="checkbox" id="envDR" onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#607D8B;cursor:pointer;">
+              <span style="font-weight:600;color:#37474F;">Disaster Recovery</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Step 2: RFC 1918 range -->
+        <div class="card blue" style="margin-bottom:14px;">
+          <h4>Step 2: RFC 1918 Base Range</h4>
+          <select id="calcBaseRange" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #CCC;border-radius:6px;margin-top:8px;">
+            <option value="10" selected>10.0.0.0/8 (Class A &mdash; 16M IPs)</option>
+            <option value="172">172.16.0.0/12 (Class B &mdash; 1M IPs)</option>
+            <option value="192">192.168.0.0/16 (Class C &mdash; 65K IPs)</option>
+          </select>
+        </div>
+
+        <!-- Step 3: VPC prefix -->
+        <div class="card green" style="margin-bottom:14px;">
+          <h4>Step 3: VPC CIDR Prefix Length</h4>
+          <select id="calcVpcPrefix" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #CCC;border-radius:6px;margin-top:8px;">
+            <option value="16" selected>/16 (65,536 IPs per VPC)</option>
+            <option value="17">/17 (32,768 IPs per VPC)</option>
+            <option value="18">/18 (16,384 IPs per VPC)</option>
+            <option value="19">/19 (8,192 IPs per VPC)</option>
+            <option value="20">/20 (4,096 IPs per VPC)</option>
+            <option value="21">/21 (2,048 IPs per VPC)</option>
+            <option value="22">/22 (1,024 IPs per VPC)</option>
+            <option value="23">/23 (512 IPs per VPC)</option>
+            <option value="24">/24 (256 IPs per VPC)</option>
+          </select>
+        </div>
+
+        <!-- Step 4: Subnet counts -->
+        <div class="card purple" style="margin-bottom:14px;">
+          <h4>Step 4: Subnets per VPC</h4>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;">
+            <div>
+              <label style="font-size:0.85em;font-weight:600;color:var(--green);">Public Subnets</label>
+              <select id="calcPubCount" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #A5D6A7;border-radius:6px;margin-top:4px;">
+                <option value="1">1</option>
+                <option value="2" selected>2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:0.85em;font-weight:600;color:var(--red);">Private Subnets</label>
+              <select id="calcPrivCount" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #FFAB91;border-radius:6px;margin-top:4px;">
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4" selected>4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Results -->
+      <div>
+        <div id="calcResults" style="min-height:300px;">
+          <!-- JS fills this -->
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture &mdash; CIDR Calculator</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 18: Terraform Generator -->
+<div class="slide" id="slide-18">
+  <h2>Terraform Script Generator</h2>
+  <div class="slide-body" style="overflow-y:auto;">
+    <div class="two-col" style="gap:20px;">
+
+      <!-- LEFT: Config -->
+      <div>
+        <!-- Option 1: VPC -->
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Option 1: Create VPC</h4>
+          <div style="margin-top:8px;">
+            <label style="font-size:0.85em;font-weight:600;">Select Environment</label>
+            <select id="tfEnv" onchange="tfPopulate()" style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;">
+              <option value="dev">Dev</option>
+              <option value="staging">Staging</option>
+              <option value="uat">UAT</option>
+              <option value="prod" selected>Production</option>
+              <option value="shared">Shared Services</option>
+              <option value="dr">Disaster Recovery</option>
+            </select>
+          </div>
+          <div style="margin-top:10px;">
+            <label style="font-size:0.85em;font-weight:600;">IPv4 CIDR Block <span style="font-weight:400;color:#999;">(auto-populated)</span></label>
+            <input type="text" id="tfVpcCidr" value="10.40.0.0/16" readonly style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;background:#F5F7FA;font-family:'Cascadia Code',Consolas,monospace;">
+          </div>
+          <div style="margin-top:10px;">
+            <label style="font-size:0.85em;font-weight:600;">Tenancy</label>
+            <select id="tfTenancy" style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;">
+              <option value="default" selected>Default</option>
+              <option value="dedicated">Dedicated</option>
+            </select>
+          </div>
+          <div style="margin-top:10px;">
+            <label style="font-size:0.85em;font-weight:600;">AWS Region</label>
+            <select id="tfRegion" onchange="tfPopulate()" style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;">
+              <option value="us-east-1" selected>us-east-1 (N. Virginia)</option>
+              <option value="us-east-2">us-east-2 (Ohio)</option>
+              <option value="us-west-1">us-west-1 (N. California)</option>
+              <option value="us-west-2">us-west-2 (Oregon)</option>
+              <option value="eu-west-1">eu-west-1 (Ireland)</option>
+              <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+              <option value="ap-south-1">ap-south-1 (Mumbai)</option>
+              <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Option 2: Subnets -->
+        <div class="card blue" style="margin-bottom:12px;">
+          <h4>Option 2: Configure Subnets</h4>
+          <div id="tfSubnetConfig" style="margin-top:8px;max-height:220px;overflow-y:auto;">
+            <!-- JS fills this -->
+          </div>
+          <button onclick="tfAddSubnet('public')" style="padding:6px 14px;font-size:0.85em;border:1px solid #A5D6A7;background:#E8F5E9;color:#2E7D32;border-radius:5px;cursor:pointer;font-weight:600;margin-top:8px;margin-right:4px;">+ Public Subnet</button>
+          <button onclick="tfAddSubnet('private')" style="padding:6px 14px;font-size:0.85em;border:1px solid #FFAB91;background:#FBE9E7;color:#BF360C;border-radius:5px;cursor:pointer;font-weight:600;margin-top:8px;">+ Private Subnet</button>
+        </div>
+
+        <!-- Option 3: Internet Gateway -->
+        <div class="card green" style="margin-bottom:12px;">
+          <h4>Option 3: Internet Gateway</h4>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="tfCreateIGW" checked style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+              <span style="font-size:0.9em;font-weight:600;">Create Internet Gateway &amp; attach to VPC</span>
+            </label>
+            <div style="margin-top:8px;">
+              <label style="font-size:0.8em;color:#888;">Gateway Name</label>
+              <input type="text" id="tfIGWName" style="width:100%;padding:8px;font-size:0.9em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+            </div>
+          </div>
+        </div>
+
+        <!-- Option 4: NAT Gateway -->
+        <div class="card purple" style="margin-bottom:12px;">
+          <h4>Option 4: NAT Gateway</h4>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="tfCreateNAT" checked style="width:18px;height:18px;accent-color:var(--purple);cursor:pointer;">
+              <span style="font-size:0.9em;font-weight:600;">Create NAT Gateway + Elastic IP</span>
+            </label>
+            <div style="margin-top:8px;">
+              <label style="font-size:0.8em;color:#888;">NAT Gateway Name</label>
+              <input type="text" id="tfNATName" style="width:100%;padding:8px;font-size:0.9em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+            </div>
+            <div style="margin-top:8px;">
+              <label style="font-size:0.8em;color:#888;">Deploy in Subnet</label>
+              <select id="tfNATSubnet" style="width:100%;padding:8px;font-size:0.9em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+                <!-- JS populates -->
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Option 5: Route Tables -->
+        <div class="card red" style="margin-bottom:12px;">
+          <h4>Option 5: Route Tables</h4>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;">
+              <input type="checkbox" id="tfCreatePubRT" checked style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+              <span style="font-size:0.9em;">Public Route Table <span style="color:#888;font-size:0.85em;">(0.0.0.0/0 &rarr; IGW)</span></span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;">
+              <input type="checkbox" id="tfCreatePrivRT" checked style="width:18px;height:18px;accent-color:var(--accent2);cursor:pointer;">
+              <span style="font-size:0.9em;">Private Route Table <span style="color:#888;font-size:0.85em;">(0.0.0.0/0 &rarr; NAT GW)</span></span>
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+              <input type="checkbox" id="tfCreateDbRT" style="width:18px;height:18px;accent-color:var(--red);cursor:pointer;">
+              <span style="font-size:0.9em;">Isolated DB Route Table <span style="color:#888;font-size:0.85em;">(no internet)</span></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Option 6: Network ACLs -->
+        <div class="card" style="margin-bottom:12px;border-left:4px solid #FF6F00;">
+          <h4 style="color:#E65100;">Option 6: Network ACLs (NACLs)</h4>
+          <div style="margin-top:8px;">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+              <input type="checkbox" id="tfCreateNACL" checked style="width:18px;height:18px;accent-color:#FF6F00;cursor:pointer;" onchange="naclToggle()">
+              <span style="font-size:0.9em;font-weight:600;">Create Network ACL</span>
+            </label>
+
+            <div id="naclConfig">
+              <!-- NACL Name -->
+              <div style="margin-bottom:8px;">
+                <label style="font-size:0.8em;color:#888;">NACL Name</label>
+                <input type="text" id="tfNACLName" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+              </div>
+
+              <!-- Associate with Subnets -->
+              <div style="margin-bottom:8px;">
+                <label style="font-size:0.8em;color:#888;display:block;margin-bottom:4px;">Associate with Subnets</label>
+                <div id="naclSubnetChecks" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;max-height:80px;overflow-y:auto;">
+                  <!-- JS populates -->
+                </div>
+              </div>
+
+              <!-- Default Rule Preset -->
+              <div style="margin-bottom:8px;">
+                <label style="font-size:0.8em;color:#888;">Default Rule Preset</label>
+                <select id="naclPreset" onchange="naclApplyPreset()" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+                  <option value="allow-all">Allow All Traffic (open)</option>
+                  <option value="deny-all">Deny All Traffic (locked down)</option>
+                  <option value="web-standard" selected>Web Standard (80, 443, SSH, Ephemeral)</option>
+                  <option value="custom">Custom (start empty)</option>
+                </select>
+              </div>
+
+              <!-- Inbound Rules -->
+              <div style="margin-bottom:6px;">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <label style="font-size:0.82em;font-weight:600;color:#1B5E20;">Inbound Rules</label>
+                  <button onclick="naclAddRule('inbound')" style="padding:3px 10px;font-size:0.78em;border:1px solid #A5D6A7;background:#E8F5E9;color:#2E7D32;border-radius:4px;cursor:pointer;font-weight:600;">+ Add</button>
+                </div>
+                <div id="naclInboundRules" style="max-height:140px;overflow-y:auto;margin-top:4px;">
+                  <!-- JS fills -->
+                </div>
+              </div>
+
+              <!-- Outbound Rules -->
+              <div>
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                  <label style="font-size:0.82em;font-weight:600;color:#B71C1C;">Outbound Rules</label>
+                  <button onclick="naclAddRule('outbound')" style="padding:3px 10px;font-size:0.78em;border:1px solid #FFAB91;background:#FBE9E7;color:#BF360C;border-radius:4px;cursor:pointer;font-weight:600;">+ Add</button>
+                </div>
+                <div id="naclOutboundRules" style="max-height:140px;overflow-y:auto;margin-top:4px;">
+                  <!-- JS fills -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="tfGenerate()" style="width:100%;padding:14px;font-size:1.1em;font-weight:700;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;letter-spacing:0.5px;transition:background 0.2s;">Generate Terraform Script</button>
+      </div>
+
+      <!-- RIGHT: Output -->
+      <div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <h3 style="margin:0;font-size:1.1em;">Generated Terraform Code</h3>
+          <button onclick="tfCopy()" id="tfCopyBtn" style="padding:6px 16px;font-size:0.85em;background:var(--primary);color:white;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Copy to Clipboard</button>
+        </div>
+        <pre id="tfOutput" style="background:#1E1E2E;color:#CDD6F4;padding:20px;border-radius:10px;font-size:0.82em;line-height:1.6;overflow:auto;max-height:calc(100vh - 240px);font-family:'Cascadia Code',Consolas,monospace;white-space:pre;tab-size:2;margin:0;"></pre>
+      </div>
+    </div>
+  </div>
+  <div class="slide-footer"><span>Enterprise VPC Architecture &mdash; Terraform Generator</span><span>Confidential</span></div>
+</div>
+
+<!-- SLIDE 19: Closing -->
+<div class="slide title-slide" id="slide-19">
+  <div>
+    <h1>Thank You</h1>
+    <div class="accent-bar"></div>
+    <div class="subtitle">Enterprise VPC CIDR Block Architecture</div>
+    <div class="meta" style="margin-top:30px;">
+      <table style="margin:0 auto;text-align:left;color:#8899AA;border-collapse:separate;border-spacing:8px;">
+        <tr><td style="padding:6px 16px;border:none;text-align:right;color:#AAB7C4;">VPCs:</td><td style="padding:6px 16px;border:none;font-weight:600;color:white;">4 (Dev, Staging, UAT, Production)</td></tr>
+        <tr><td style="padding:6px 16px;border:none;text-align:right;color:#AAB7C4;">Subnets:</td><td style="padding:6px 16px;border:none;font-weight:600;color:white;">24 total (6 per VPC)</td></tr>
+        <tr><td style="padding:6px 16px;border:none;text-align:right;color:#AAB7C4;">Address Space:</td><td style="padding:6px 16px;border:none;font-weight:600;color:white;">262,144 IPs (97.7% available for growth)</td></tr>
+        <tr><td style="padding:6px 16px;border:none;text-align:right;color:#AAB7C4;">Timeline:</td><td style="padding:6px 16px;border:none;font-weight:600;color:white;">8 weeks across 4 phases</td></tr>
+        <tr><td style="padding:6px 16px;border:none;text-align:right;color:#AAB7C4;">IaC:</td><td style="padding:6px 16px;border:none;font-weight:600;color:white;">Terraform with reusable modules</td></tr>
+      </table>
+    </div>
+    <div style="margin-top:40px;color:#556677;font-size:0.9em;">Questions?</div>
+  </div>
+</div>
+
+<!-- Navigation -->
+<div class="slide-counter" id="counter">1 / 19</div>
+<div class="nav">
+  <button id="prevBtn" onclick="changeSlide(-1)" disabled>&larr; Previous</button>
+  <button id="nextBtn" onclick="changeSlide(1)">Next &rarr;</button>
+</div>
+
+<script>
+  let current = 1;
+  const total = 19;
+
+  function changeSlide(dir) {
+    document.getElementById('slide-' + current).classList.remove('active');
+    current += dir;
+    if (current < 1) current = 1;
+    if (current > total) current = total;
+    document.getElementById('slide-' + current).classList.add('active');
+    document.getElementById('counter').textContent = current + ' / ' + total;
+    document.getElementById('prevBtn').disabled = (current === 1);
+    document.getElementById('nextBtn').disabled = (current === total);
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); changeSlide(1); }
+    if (e.key === 'ArrowLeft') { e.preventDefault(); changeSlide(-1); }
+  });
+
+  /* ---- CIDR Calculator Engine ---- */
+  function ipToInt(a, b, c, d) { return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0; }
+  function intToIp(n) { return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.'); }
+  function nextPow2(n) { var p=1; while(p<n) p*=2; return p; }
+
+  var ENV_DEFS = [
+    { id:'envDev',     name:'Dev',             color:'#2E7D32', bg:'linear-gradient(135deg,#2E7D32,#4CAF50)',  octet10:10, octet172:16, octet192:0 },
+    { id:'envStaging', name:'Staging',         color:'#E65100', bg:'linear-gradient(135deg,#E65100,#FF9800)',  octet10:20, octet172:17, octet192:1 },
+    { id:'envUAT',     name:'UAT',             color:'#6A1B9A', bg:'linear-gradient(135deg,#4A148C,#9C27B0)', octet10:30, octet172:18, octet192:2 },
+    { id:'envProd',    name:'Production',      color:'#B71C1C', bg:'linear-gradient(135deg,#B71C1C,#F44336)', octet10:40, octet172:19, octet192:3 },
+    { id:'envShared',  name:'Shared Services', color:'#0D47A1', bg:'linear-gradient(135deg,#0D47A1,#1976D2)', octet10:50, octet172:20, octet192:4 },
+    { id:'envDR',      name:'Disaster Recovery',color:'#37474F',bg:'linear-gradient(135deg,#37474F,#607D8B)', octet10:60, octet172:21, octet192:5 }
+  ];
+
+  function getSelectedEnvs() {
+    return ENV_DEFS.filter(function(e) { return document.getElementById(e.id).checked; });
+  }
+
+  function getVpcStart(env, base, vpcPrefix) {
+    if (base === '10')  return ipToInt(10, env.octet10, 0, 0);
+    if (base === '172') return ipToInt(172, Math.min(env.octet172, 31), 0, 0);
+    return ipToInt(192, 168, env.octet192, 0);
+  }
+
+  function calcGenerate() {
+    var envs       = getSelectedEnvs();
+    var base       = document.getElementById('calcBaseRange').value;
+    var vpcPrefix  = parseInt(document.getElementById('calcVpcPrefix').value);
+    var pubCount   = parseInt(document.getElementById('calcPubCount').value);
+    var privCount  = parseInt(document.getElementById('calcPrivCount').value);
+    var vpcCount   = envs.length;
+
+    if (vpcCount === 0) {
+      document.getElementById('calcResults').innerHTML =
+        '<div class="highlight-box" style="border-color:#FFE082;">'+
+        '<strong>Select at least one environment</strong> from the checkboxes on the left.</div>';
+      return;
+    }
+
+    var totalSubnets   = pubCount + privCount;
+    var slotsNeeded    = nextPow2(totalSubnets);
+    var subnetBits     = Math.log2(slotsNeeded);
+    var subnetPrefix   = vpcPrefix + subnetBits;
+    var vpcTotalIPs    = Math.pow(2, 32 - vpcPrefix);
+    var subnetTotalIPs = Math.pow(2, 32 - subnetPrefix);
+    var subnetUsable   = subnetTotalIPs - 5;
+
+    if (subnetPrefix > 28) {
+      document.getElementById('calcResults').innerHTML =
+        '<div class="highlight-box" style="border-color:#EF9A9A;background:#FFEBEE;">'+
+        '<strong style="color:#D13212;">Error:</strong> Too many subnets for /' + vpcPrefix + ' VPC. '+
+        'Need /' + subnetPrefix + ' subnets but AWS minimum is /28. Reduce subnets or use a larger VPC prefix.</div>';
+      return;
+    }
+
+    var html = '';
+
+    /* --- VPC CIDR cards per environment --- */
+    html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(vpcCount,3) + ',1fr);gap:10px;margin-bottom:14px;">';
+    for (var i = 0; i < vpcCount; i++) {
+      var env = envs[i];
+      var vpcStartInt = getVpcStart(env, base, vpcPrefix);
+      var vpcCidr = intToIp(vpcStartInt) + '/' + vpcPrefix;
+      html += '<div style="background:' + env.bg + ';border-radius:8px;padding:14px;text-align:center;color:white;">';
+      html += '<div style="font-size:0.75em;text-transform:uppercase;letter-spacing:1px;opacity:0.9;">' + env.name + '</div>';
+      html += '<div style="font-size:1.2em;font-weight:700;margin:4px 0;font-family:Cascadia Code,Consolas,monospace;">' + vpcCidr + '</div>';
+      html += '<div style="font-size:0.8em;opacity:0.85;">' + vpcTotalIPs.toLocaleString() + ' IPs</div>';
+      html += '</div>';
+    }
+    html += '</div>';
+
+    /* --- Stats bar --- */
+    html += '<div class="rule-block" style="margin-bottom:12px;padding:10px 14px;">';
+    html += '<div style="display:flex;justify-content:space-between;font-size:0.88em;">';
+    html += '<span>Environments: <strong>' + vpcCount + '</strong></span>';
+    html += '<span>Subnets/VPC: <strong>' + totalSubnets + '</strong> (' + pubCount + ' pub + ' + privCount + ' priv)</span>';
+    html += '<span>Subnet: <strong>/' + subnetPrefix + '</strong> (' + subnetUsable.toLocaleString() + ' usable)</span>';
+    html += '</div></div>';
+
+    /* --- Per-environment subnet tables --- */
+    for (var v = 0; v < vpcCount; v++) {
+      var env = envs[v];
+      var vpcStartInt = getVpcStart(env, base, vpcPrefix);
+      var vpcCidr = intToIp(vpcStartInt) + '/' + vpcPrefix;
+      var vpcEndInt = vpcStartInt + vpcTotalIPs - 1;
+
+      html += '<div style="margin-bottom:14px;border-left:4px solid ' + env.color + ';padding-left:12px;">';
+      html += '<h3 style="margin:4px 0;font-size:1.05em;color:' + env.color + ';">' + env.name;
+      html += ' <span class="mono" style="font-weight:400;font-size:0.9em;">' + vpcCidr + '</span>';
+      html += ' <span style="font-size:0.75em;color:#999;font-weight:400;">(' + intToIp(vpcStartInt) + ' &ndash; ' + intToIp(vpcEndInt) + ')</span>';
+      html += '</h3>';
+      html += '<table style="margin:4px 0;font-size:0.82em;">';
+      html += '<tr><th>#</th><th>Subnet Name</th><th>CIDR Block</th><th>IP Range</th><th>Usable</th><th>Type</th></tr>';
+
+      var subIdx = 0;
+      for (var s = 0; s < pubCount; s++) {
+        var subStart = vpcStartInt + (subIdx * subnetTotalIPs);
+        var subEnd   = subStart + subnetTotalIPs - 1;
+        var cidr = intToIp(subStart) + '/' + subnetPrefix;
+        var azLabel = 'az-' + (s + 1);
+        html += '<tr>';
+        html += '<td>' + (subIdx+1) + '</td>';
+        html += '<td>' + env.name.toLowerCase().replace(/\s+/g,'-') + '-public-' + azLabel + '</td>';
+        html += '<td class="mono">' + cidr + '</td>';
+        html += '<td style="font-size:0.9em;color:#888;">' + intToIp(subStart) + ' &ndash; ' + intToIp(subEnd) + '</td>';
+        html += '<td>' + subnetUsable.toLocaleString() + '</td>';
+        html += '<td><span class="tag public">Public</span></td>';
+        html += '</tr>';
+        subIdx++;
+      }
+
+      var appCount = Math.ceil(privCount / 2);
+      var dbCount  = privCount - appCount;
+
+      for (var s = 0; s < appCount; s++) {
+        var subStart = vpcStartInt + (subIdx * subnetTotalIPs);
+        var subEnd   = subStart + subnetTotalIPs - 1;
+        var cidr = intToIp(subStart) + '/' + subnetPrefix;
+        var azLabel = 'az-' + ((s % Math.max(pubCount,2)) + 1);
+        html += '<tr>';
+        html += '<td>' + (subIdx+1) + '</td>';
+        html += '<td>' + env.name.toLowerCase().replace(/\s+/g,'-') + '-app-private-' + azLabel + '</td>';
+        html += '<td class="mono">' + cidr + '</td>';
+        html += '<td style="font-size:0.9em;color:#888;">' + intToIp(subStart) + ' &ndash; ' + intToIp(subEnd) + '</td>';
+        html += '<td>' + subnetUsable.toLocaleString() + '</td>';
+        html += '<td><span class="tag private">Private</span></td>';
+        html += '</tr>';
+        subIdx++;
+      }
+
+      for (var s = 0; s < dbCount; s++) {
+        var subStart = vpcStartInt + (subIdx * subnetTotalIPs);
+        var subEnd   = subStart + subnetTotalIPs - 1;
+        var cidr = intToIp(subStart) + '/' + subnetPrefix;
+        var azLabel = 'az-' + ((s % Math.max(pubCount,2)) + 1);
+        html += '<tr>';
+        html += '<td>' + (subIdx+1) + '</td>';
+        html += '<td>' + env.name.toLowerCase().replace(/\s+/g,'-') + '-db-private-' + azLabel + '</td>';
+        html += '<td class="mono">' + cidr + '</td>';
+        html += '<td style="font-size:0.9em;color:#888;">' + intToIp(subStart) + ' &ndash; ' + intToIp(subEnd) + '</td>';
+        html += '<td>' + subnetUsable.toLocaleString() + '</td>';
+        html += '<td><span class="tag isolated">Isolated</span></td>';
+        html += '</tr>';
+        subIdx++;
+      }
+
+      var remaining = vpcTotalIPs - (slotsNeeded * subnetTotalIPs);
+      html += '</table>';
+      html += '<div style="font-size:0.78em;color:#999;margin-top:2px;">';
+      html += 'Allocated: ' + (totalSubnets * subnetTotalIPs).toLocaleString() + ' IPs';
+      html += ' &bull; Free in VPC: ' + remaining.toLocaleString() + ' IPs (' + Math.round(remaining/vpcTotalIPs*100) + '%)';
+      html += '</div></div>';
+    }
+
+    /* --- Grand summary --- */
+    var grandSubnets = vpcCount * totalSubnets;
+    var grandUsable  = vpcCount * totalSubnets * subnetUsable;
+    var grandTotal   = vpcCount * vpcTotalIPs;
+    var grandAlloc   = vpcCount * totalSubnets * subnetTotalIPs;
+    html += '<div class="highlight-box" style="margin-top:6px;">';
+    html += '<strong>Grand Total:</strong> ';
+    html += vpcCount + ' VPCs &times; ' + totalSubnets + ' subnets = <strong>' + grandSubnets + ' subnets</strong>';
+    html += ' &bull; ' + grandUsable.toLocaleString() + ' usable IPs';
+    html += ' &bull; ' + Math.round((grandTotal - grandAlloc)/grandTotal*100) + '% address space reserved for growth';
+    html += '</div>';
+
+    /* --- Architecture diagram when all environment options are selected --- */
+    if (vpcCount === ENV_DEFS.length) {
+      var appTierCount = Math.ceil(privCount / 2);
+      var dbTierCount  = privCount - appTierCount;
+      html += '<div class="highlight-box" style="margin-top:10px;border-color:#90CAF9;background:#E3F2FD;">';
+      html += '<strong style="color:#0D47A1;">Architecture Diagram (Auto-generated)</strong>';
+      html += '<div style="font-size:0.82em;color:#335;margin-top:2px;">All environment options selected. Diagram reflects your subnet counts and CIDR sizing.</div>';
+      html += '<div style="margin-top:8px;background:white;border-radius:10px;padding:10px;">';
+      html += '<div style="text-align:center;font-size:0.82em;color:#566;letter-spacing:0.4px;margin-bottom:8px;">Internet / Corporate Network</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">';
+      for (var di = 0; di < envs.length; di++) {
+        var denv = envs[di];
+        var dvpcStartInt = getVpcStart(denv, base, vpcPrefix);
+        var dvpcCidr = intToIp(dvpcStartInt) + '/' + vpcPrefix;
+        html += '<div style="border:1px solid #D0D7DE;border-radius:8px;padding:8px;background:#FAFCFF;">';
+        html += '<div style="font-size:0.74em;font-weight:700;color:' + denv.color + ';text-transform:uppercase;letter-spacing:0.6px;">' + denv.name + ' VPC</div>';
+        html += '<div style="font-size:0.78em;color:#334;font-family:Cascadia Code,Consolas,monospace;margin-bottom:6px;">' + dvpcCidr + '</div>';
+        html += '<div style="border:1px solid #A5D6A7;background:#E8F5E9;border-radius:6px;padding:5px;margin-bottom:4px;font-size:0.76em;">Public Tier: ' + pubCount + ' x /' + subnetPrefix + '</div>';
+        html += '<div style="border:1px solid #FFCC80;background:#FFF3E0;border-radius:6px;padding:5px;margin-bottom:4px;font-size:0.76em;">App Tier: ' + appTierCount + ' x /' + subnetPrefix + '</div>';
+        html += '<div style="border:1px solid #B39DDB;background:#F3E5F5;border-radius:6px;padding:5px;font-size:0.76em;">DB Tier: ' + dbTierCount + ' x /' + subnetPrefix + '</div>';
+        html += '</div>';
+      }
+      html += '</div>';
+      html += '<div style="margin-top:8px;font-size:0.76em;color:#4A5568;">Flow: Internet -> Public Tier -> App Tier -> DB Tier (isolated)</div>';
+      html += '</div></div>';
+    } else {
+      html += '<div style="margin-top:8px;font-size:0.8em;color:#6B7280;">Select all environment options (Dev, Staging, UAT, Production, Shared Services, Disaster Recovery) to preview the architecture diagram here.</div>';
+    }
+
+    document.getElementById('calcResults').innerHTML = html;
+  }
+
+  document.addEventListener('DOMContentLoaded', calcGenerate);
+
+  /* ---- Terraform Generator Engine ---- */
+  var TF_ENV_MAP = {
+    dev:     { name:'dev',     label:'Dev',              octet:10, color:'#2E7D32' },
+    staging: { name:'staging', label:'Staging',          octet:20, color:'#E65100' },
+    uat:     { name:'uat',     label:'UAT',              octet:30, color:'#6A1B9A' },
+    prod:    { name:'prod',    label:'Production',       octet:40, color:'#B71C1C' },
+    shared:  { name:'shared',  label:'Shared Services',  octet:50, color:'#0D47A1' },
+    dr:      { name:'dr',      label:'Disaster Recovery', octet:60, color:'#37474F' }
+  };
+
+  var tfSubnets = [];
+  var tfSubnetCounter = 0;
+
+  function tfPopulate() {
+    var envKey = document.getElementById('tfEnv').value;
+    var env = TF_ENV_MAP[envKey];
+    document.getElementById('tfVpcCidr').value = '10.' + env.octet + '.0.0/16';
+    document.getElementById('tfIGWName').value = env.name + '-igw';
+    document.getElementById('tfNATName').value = env.name + '-nat';
+    document.getElementById('tfNACLName').value = env.name + '-nacl';
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var el = document.getElementById('tfSubCidr_' + tfSubnets[i].id);
+      if (el) {
+        var prefix = tfSubnets[i].type === 'public' ? 1 : (tfSubnets[i].type === 'private' ? 16 : 32);
+        var offset = 0;
+        var sameType = tfSubnets.filter(function(s,idx) { return s.type === tfSubnets[i].type && idx < i; });
+        offset = sameType.length;
+        el.value = '10.' + env.octet + '.' + (prefix + offset) + '.0/24';
+      }
+    }
+    tfRefreshNATSubnetDropdown();
+  }
+
+  function tfRefreshNATSubnetDropdown() {
+    var sel = document.getElementById('tfNATSubnet');
+    var prev = sel.value;
+    sel.innerHTML = '';
+    var pubSubs = tfSubnets.filter(function(s) { return s.type === 'public'; });
+    if (pubSubs.length === 0) {
+      var opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = '(no public subnets)';
+      sel.appendChild(opt);
+    } else {
+      for (var i = 0; i < pubSubs.length; i++) {
+        var nameEl = document.getElementById('tfSubName_' + pubSubs[i].id);
+        var label = nameEl ? nameEl.value : pubSubs[i].name;
+        var opt = document.createElement('option');
+        opt.value = pubSubs[i].id;
+        opt.textContent = label;
+        sel.appendChild(opt);
+      }
+      if (prev && sel.querySelector('option[value="' + prev + '"]')) {
+        sel.value = prev;
+      }
+    }
+  }
+
+  function tfAddSubnet(type) {
+    tfSubnetCounter++;
+    var envKey = document.getElementById('tfEnv').value;
+    var env = TF_ENV_MAP[envKey];
+    var region = document.getElementById('tfRegion').value;
+    var existingSameType = tfSubnets.filter(function(s) { return s.type === type; }).length;
+    var azSuffix = String.fromCharCode(97 + (existingSameType % 3));
+    var prefix = type === 'public' ? 1 : 16;
+    var cidr = '10.' + env.octet + '.' + (prefix + existingSameType) + '.0/24';
+    var subName = env.name + '-' + type + '-subnet-az' + (existingSameType + 1);
+    var sub = { id: tfSubnetCounter, type: type, name: subName, az: region + azSuffix, cidr: cidr };
+    tfSubnets.push(sub);
+    tfRenderSubnets();
+  }
+
+  function tfRemoveSubnet(id) {
+    tfSubnets = tfSubnets.filter(function(s) { return s.id !== id; });
+    tfRenderSubnets();
+  }
+
+  function tfRenderSubnets() {
+    var container = document.getElementById('tfSubnetConfig');
+    if (tfSubnets.length === 0) {
+      container.innerHTML = '<div style="color:#999;font-size:0.9em;padding:8px 0;">No subnets added yet. Click the buttons below to add subnets.</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var s = tfSubnets[i];
+      var borderColor = s.type === 'public' ? '#A5D6A7' : '#FFAB91';
+      var tagClass = s.type === 'public' ? 'public' : 'isolated';
+      var tagLabel = s.type === 'public' ? 'Public' : 'Private';
+      html += '<div style="border:1px solid ' + borderColor + ';border-radius:8px;padding:10px 12px;margin-bottom:8px;background:white;position:relative;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+      html += '<span class="tag ' + tagClass + '">' + tagLabel + '</span>';
+      html += '<button onclick="tfRemoveSubnet(' + s.id + ')" style="background:none;border:none;color:#D13212;cursor:pointer;font-size:1.1em;font-weight:700;" title="Remove">&times;</button>';
+      html += '</div>';
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+      html += '<div><label style="font-size:0.75em;color:#888;">Subnet Name</label>';
+      html += '<input type="text" id="tfSubName_' + s.id + '" value="' + s.name + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;"></div>';
+      html += '<div><label style="font-size:0.75em;color:#888;">Availability Zone</label>';
+      html += '<input type="text" id="tfSubAz_' + s.id + '" value="' + s.az + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;"></div>';
+      html += '<div><label style="font-size:0.75em;color:#888;">IPv4 Subnet CIDR Block</label>';
+      html += '<input type="text" id="tfSubCidr_' + s.id + '" value="' + s.cidr + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;font-family:Cascadia Code,Consolas,monospace;"></div>';
+      html += '<div><label style="font-size:0.75em;color:#888;">Map Public IP</label>';
+      html += '<select id="tfSubPubIp_' + s.id + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;">';
+      html += '<option value="true"' + (s.type === 'public' ? ' selected' : '') + '>Yes</option>';
+      html += '<option value="false"' + (s.type !== 'public' ? ' selected' : '') + '>No</option>';
+      html += '</select></div>';
+      html += '</div></div>';
+    }
+    container.innerHTML = html;
+    tfRefreshNATSubnetDropdown();
+    naclRefreshSubnetChecks();
+  }
+
+  /* ---- NACL Engine ---- */
+  var naclInbound  = [];
+  var naclOutbound = [];
+  var naclRuleCounter = 0;
+
+  function naclToggle() {
+    var on = document.getElementById('tfCreateNACL').checked;
+    document.getElementById('naclConfig').style.display = on ? '' : 'none';
+  }
+
+  function naclRefreshSubnetChecks() {
+    var container = document.getElementById('naclSubnetChecks');
+    if (!container) return;
+    var html = '';
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var s = tfSubnets[i];
+      var nameEl = document.getElementById('tfSubName_' + s.id);
+      var label = nameEl ? nameEl.value : s.name;
+      var tagColor = s.type === 'public' ? '#2E7D32' : '#BF360C';
+      html += '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.82em;">';
+      html += '<input type="checkbox" class="naclSubCheck" value="' + s.id + '" checked style="width:15px;height:15px;accent-color:#FF6F00;cursor:pointer;">';
+      html += '<span style="color:' + tagColor + ';">' + label + '</span>';
+      html += '</label>';
+    }
+    if (tfSubnets.length === 0) {
+      html = '<span style="color:#999;font-size:0.85em;">No subnets configured</span>';
+    }
+    container.innerHTML = html;
+  }
+
+  var NACL_PRESETS = {
+    'allow-all': {
+      inbound: [
+        { rule: 100, proto: '-1', fromPort: 0, toPort: 0, cidr: '0.0.0.0/0', action: 'allow' }
+      ],
+      outbound: [
+        { rule: 100, proto: '-1', fromPort: 0, toPort: 0, cidr: '0.0.0.0/0', action: 'allow' }
+      ]
+    },
+    'deny-all': {
+      inbound: [],
+      outbound: []
+    },
+    'web-standard': {
+      inbound: [
+        { rule: 100, proto: 'tcp', fromPort: 80,    toPort: 80,    cidr: '0.0.0.0/0', action: 'allow' },
+        { rule: 110, proto: 'tcp', fromPort: 443,   toPort: 443,   cidr: '0.0.0.0/0', action: 'allow' },
+        { rule: 120, proto: 'tcp', fromPort: 22,    toPort: 22,    cidr: '0.0.0.0/0', action: 'allow' },
+        { rule: 130, proto: 'tcp', fromPort: 1024,  toPort: 65535, cidr: '0.0.0.0/0', action: 'allow' }
+      ],
+      outbound: [
+        { rule: 100, proto: 'tcp', fromPort: 80,    toPort: 80,    cidr: '0.0.0.0/0', action: 'allow' },
+        { rule: 110, proto: 'tcp', fromPort: 443,   toPort: 443,   cidr: '0.0.0.0/0', action: 'allow' },
+        { rule: 120, proto: 'tcp', fromPort: 1024,  toPort: 65535, cidr: '0.0.0.0/0', action: 'allow' }
+      ]
+    },
+    'custom': {
+      inbound: [],
+      outbound: []
+    }
+  };
+
+  function naclApplyPreset() {
+    var preset = document.getElementById('naclPreset').value;
+    var p = NACL_PRESETS[preset];
+    naclRuleCounter = 0;
+    naclInbound = [];
+    naclOutbound = [];
+    for (var i = 0; i < p.inbound.length; i++) {
+      naclRuleCounter++;
+      var r = p.inbound[i];
+      naclInbound.push({ id: naclRuleCounter, rule: r.rule, proto: r.proto, fromPort: r.fromPort, toPort: r.toPort, cidr: r.cidr, action: r.action });
+    }
+    for (var i = 0; i < p.outbound.length; i++) {
+      naclRuleCounter++;
+      var r = p.outbound[i];
+      naclOutbound.push({ id: naclRuleCounter, rule: r.rule, proto: r.proto, fromPort: r.fromPort, toPort: r.toPort, cidr: r.cidr, action: r.action });
+    }
+    naclRenderRules();
+  }
+
+  function naclAddRule(direction) {
+    naclRuleCounter++;
+    var arr = direction === 'inbound' ? naclInbound : naclOutbound;
+    var lastRule = arr.length > 0 ? arr[arr.length - 1].rule : 90;
+    arr.push({ id: naclRuleCounter, rule: lastRule + 10, proto: 'tcp', fromPort: 443, toPort: 443, cidr: '0.0.0.0/0', action: 'allow' });
+    naclRenderRules();
+  }
+
+  function naclRemoveRule(direction, id) {
+    if (direction === 'inbound') {
+      naclInbound = naclInbound.filter(function(r) { return r.id !== id; });
+    } else {
+      naclOutbound = naclOutbound.filter(function(r) { return r.id !== id; });
+    }
+    naclRenderRules();
+  }
+
+  function naclRenderRules() {
+    naclRenderDir('inbound', naclInbound, document.getElementById('naclInboundRules'));
+    naclRenderDir('outbound', naclOutbound, document.getElementById('naclOutboundRules'));
+  }
+
+  function naclRenderDir(dir, rules, container) {
+    if (!container) return;
+    if (rules.length === 0) {
+      container.innerHTML = '<div style="color:#999;font-size:0.8em;padding:4px 0;">No rules. Default DENY applies.</div>';
+      return;
+    }
+    var html = '';
+    html += '<table style="width:100%;font-size:0.78em;border-collapse:collapse;">';
+    html += '<tr style="background:#F0F2F5;"><th style="padding:3px 4px;">Rule#</th><th>Protocol</th><th>From</th><th>To</th><th>CIDR</th><th>Action</th><th></th></tr>';
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i];
+      var rowBg = r.action === 'deny' ? '#FFF3E0' : '#F1F8E9';
+      html += '<tr style="background:' + rowBg + ';">';
+      html += '<td><input type="number" id="naclR_' + dir + '_' + r.id + '" value="' + r.rule + '" style="width:50px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;"></td>';
+      html += '<td><select id="naclP_' + dir + '_' + r.id + '" style="padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;">';
+      html += '<option value="tcp"' + (r.proto === 'tcp' ? ' selected' : '') + '>TCP</option>';
+      html += '<option value="udp"' + (r.proto === 'udp' ? ' selected' : '') + '>UDP</option>';
+      html += '<option value="icmp"' + (r.proto === 'icmp' ? ' selected' : '') + '>ICMP</option>';
+      html += '<option value="-1"' + (r.proto === '-1' ? ' selected' : '') + '>All</option>';
+      html += '</select></td>';
+      html += '<td><input type="number" id="naclFP_' + dir + '_' + r.id + '" value="' + r.fromPort + '" style="width:52px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;"></td>';
+      html += '<td><input type="number" id="naclTP_' + dir + '_' + r.id + '" value="' + r.toPort + '" style="width:52px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;"></td>';
+      html += '<td><input type="text" id="naclC_' + dir + '_' + r.id + '" value="' + r.cidr + '" style="width:100px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;font-family:monospace;"></td>';
+      html += '<td><select id="naclA_' + dir + '_' + r.id + '" style="padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;">';
+      html += '<option value="allow"' + (r.action === 'allow' ? ' selected' : '') + '>Allow</option>';
+      html += '<option value="deny"' + (r.action === 'deny' ? ' selected' : '') + '>Deny</option>';
+      html += '</select></td>';
+      html += '<td><button onclick="naclRemoveRule(\'' + dir + '\',' + r.id + ')" style="background:none;border:none;color:#D13212;cursor:pointer;font-weight:700;font-size:1.1em;" title="Remove">&times;</button></td>';
+      html += '</tr>';
+    }
+    html += '</table>';
+    container.innerHTML = html;
+  }
+
+  function naclReadRules(dir, rules) {
+    var result = [];
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i];
+      result.push({
+        rule:     parseInt(document.getElementById('naclR_'  + dir + '_' + r.id).value) || r.rule,
+        proto:    document.getElementById('naclP_'  + dir + '_' + r.id).value,
+        fromPort: parseInt(document.getElementById('naclFP_' + dir + '_' + r.id).value),
+        toPort:   parseInt(document.getElementById('naclTP_' + dir + '_' + r.id).value),
+        cidr:     document.getElementById('naclC_'  + dir + '_' + r.id).value,
+        action:   document.getElementById('naclA_'  + dir + '_' + r.id).value
+      });
+    }
+    return result;
+  }
+
+  function tfSanitize(name) {
+    return name.replace(/[^a-zA-Z0-9_-]/g, '_').replace(/-/g, '_');
+  }
+
+  function tfGenerate() {
+    var envKey    = document.getElementById('tfEnv').value;
+    var env       = TF_ENV_MAP[envKey];
+    var vpcCidr   = document.getElementById('tfVpcCidr').value;
+    var tenancy   = document.getElementById('tfTenancy').value;
+    var region    = document.getElementById('tfRegion').value;
+    var vpcName   = env.name + '-vpc';
+    var vpcTfId   = tfSanitize(vpcName);
+
+    var createIGW   = document.getElementById('tfCreateIGW').checked;
+    var igwName     = document.getElementById('tfIGWName').value || (env.name + '-igw');
+    var igwTfId     = tfSanitize(igwName);
+
+    var createNAT   = document.getElementById('tfCreateNAT').checked;
+    var natDispName = document.getElementById('tfNATName').value || (env.name + '-nat');
+    var natTfId     = tfSanitize(natDispName);
+    var natSubnetId = document.getElementById('tfNATSubnet').value;
+
+    var createPubRT  = document.getElementById('tfCreatePubRT').checked;
+    var createPrivRT = document.getElementById('tfCreatePrivRT').checked;
+    var createDbRT   = document.getElementById('tfCreateDbRT').checked;
+
+    var subs = [];
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var s = tfSubnets[i];
+      subs.push({
+        id:     s.id,
+        type:   s.type,
+        name:   document.getElementById('tfSubName_' + s.id).value,
+        az:     document.getElementById('tfSubAz_' + s.id).value,
+        cidr:   document.getElementById('tfSubCidr_' + s.id).value,
+        pubIp:  document.getElementById('tfSubPubIp_' + s.id).value
+      });
+    }
+
+    var pubSubs  = subs.filter(function(s) { return s.type === 'public'; });
+    var privSubs = subs.filter(function(s) { return s.type === 'private'; });
+
+    var tf = '';
+    tf += '# ============================================\n';
+    tf += '# Terraform - ' + env.label + ' VPC Infrastructure\n';
+    tf += '# Auto-generated from CIDR Calculator\n';
+    tf += '# ============================================\n\n';
+
+    tf += 'terraform {\n';
+    tf += '  required_version = ">= 1.5.0"\n\n';
+    tf += '  required_providers {\n';
+    tf += '    aws = {\n';
+    tf += '      source  = "hashicorp/aws"\n';
+    tf += '      version = "~> 5.0"\n';
+    tf += '    }\n';
+    tf += '  }\n';
+    tf += '}\n\n';
+
+    tf += 'provider "aws" {\n';
+    tf += '  region = "' + region + '"\n';
+    tf += '}\n\n';
+
+    /* ---- VPC ---- */
+    tf += '# ---- VPC ----\n';
+    tf += 'resource "aws_vpc" "' + vpcTfId + '" {\n';
+    tf += '  cidr_block           = "' + vpcCidr + '"\n';
+    tf += '  instance_tenancy     = "' + tenancy + '"\n';
+    tf += '  enable_dns_support   = true\n';
+    tf += '  enable_dns_hostnames = true\n\n';
+    tf += '  tags = {\n';
+    tf += '    Name        = "' + vpcName + '"\n';
+    tf += '    Environment = "' + env.name + '"\n';
+    tf += '  }\n';
+    tf += '}\n\n';
+
+    /* ---- Subnets ---- */
+    if (subs.length > 0) {
+      tf += '# ---- Subnets ----\n';
+      for (var i = 0; i < subs.length; i++) {
+        var s = subs[i];
+        var tfId = tfSanitize(s.name);
+        tf += 'resource "aws_subnet" "' + tfId + '" {\n';
+        tf += '  vpc_id                  = aws_vpc.' + vpcTfId + '.id\n';
+        tf += '  cidr_block              = "' + s.cidr + '"\n';
+        tf += '  availability_zone       = "' + s.az + '"\n';
+        tf += '  map_public_ip_on_launch = ' + s.pubIp + '\n\n';
+        tf += '  tags = {\n';
+        tf += '    Name        = "' + s.name + '"\n';
+        tf += '    Environment = "' + env.name + '"\n';
+        tf += '    Tier        = "' + s.type + '"\n';
+        tf += '  }\n';
+        tf += '}\n\n';
+      }
+    }
+
+    /* ---- Internet Gateway ---- */
+    if (createIGW) {
+      tf += '# ---- Internet Gateway ----\n';
+      tf += 'resource "aws_internet_gateway" "' + igwTfId + '" {\n';
+      tf += '  vpc_id = aws_vpc.' + vpcTfId + '.id\n\n';
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + igwName + '"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+    }
+
+    /* ---- Public Route Table ---- */
+    if (createPubRT) {
+      tf += '# ---- Public Route Table ----\n';
+      tf += 'resource "aws_route_table" "' + env.name + '_public_rt" {\n';
+      tf += '  vpc_id = aws_vpc.' + vpcTfId + '.id\n\n';
+      if (createIGW) {
+        tf += '  route {\n';
+        tf += '    cidr_block = "0.0.0.0/0"\n';
+        tf += '    gateway_id = aws_internet_gateway.' + igwTfId + '.id\n';
+        tf += '  }\n\n';
+      }
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + env.name + '-public-rt"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+
+      for (var j = 0; j < pubSubs.length; j++) {
+        var ps = pubSubs[j];
+        tf += 'resource "aws_route_table_association" "' + tfSanitize(ps.name) + '_rta" {\n';
+        tf += '  subnet_id      = aws_subnet.' + tfSanitize(ps.name) + '.id\n';
+        tf += '  route_table_id = aws_route_table.' + env.name + '_public_rt.id\n';
+        tf += '}\n\n';
+      }
+    }
+
+    /* ---- NAT Gateway ---- */
+    if (createNAT) {
+      var eipTfId = natTfId + '_eip';
+      tf += '# ---- Elastic IP for NAT Gateway ----\n';
+      tf += 'resource "aws_eip" "' + eipTfId + '" {\n';
+      tf += '  domain = "vpc"\n\n';
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + natDispName + '-eip"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+
+      tf += '# ---- NAT Gateway ----\n';
+      tf += 'resource "aws_nat_gateway" "' + natTfId + '" {\n';
+      tf += '  allocation_id = aws_eip.' + eipTfId + '.id\n';
+
+      var natSub = subs.find(function(s) { return String(s.id) === String(natSubnetId); });
+      if (!natSub) natSub = pubSubs[0];
+      if (natSub) {
+        tf += '  subnet_id     = aws_subnet.' + tfSanitize(natSub.name) + '.id\n';
+      }
+      tf += '\n';
+      if (createIGW) {
+        tf += '  depends_on = [aws_internet_gateway.' + igwTfId + ']\n\n';
+      }
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + natDispName + '"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+    }
+
+    /* ---- Private Route Table ---- */
+    if (createPrivRT) {
+      tf += '# ---- Private Route Table ----\n';
+      tf += 'resource "aws_route_table" "' + env.name + '_private_rt" {\n';
+      tf += '  vpc_id = aws_vpc.' + vpcTfId + '.id\n\n';
+      if (createNAT) {
+        tf += '  route {\n';
+        tf += '    cidr_block     = "0.0.0.0/0"\n';
+        tf += '    nat_gateway_id = aws_nat_gateway.' + natTfId + '.id\n';
+        tf += '  }\n\n';
+      }
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + env.name + '-private-rt"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+
+      for (var j = 0; j < privSubs.length; j++) {
+        var ps = privSubs[j];
+        tf += 'resource "aws_route_table_association" "' + tfSanitize(ps.name) + '_rta" {\n';
+        tf += '  subnet_id      = aws_subnet.' + tfSanitize(ps.name) + '.id\n';
+        tf += '  route_table_id = aws_route_table.' + env.name + '_private_rt.id\n';
+        tf += '}\n\n';
+      }
+    }
+
+    /* ---- Isolated DB Route Table ---- */
+    if (createDbRT) {
+      tf += '# ---- Isolated DB Route Table (no internet) ----\n';
+      tf += 'resource "aws_route_table" "' + env.name + '_db_rt" {\n';
+      tf += '  vpc_id = aws_vpc.' + vpcTfId + '.id\n\n';
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + env.name + '-db-isolated-rt"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+    }
+
+    /* ---- Network ACL ---- */
+    var createNACL = document.getElementById('tfCreateNACL').checked;
+    if (createNACL) {
+      var naclName  = document.getElementById('tfNACLName').value || (env.name + '-nacl');
+      var naclTfId  = tfSanitize(naclName);
+      var inRules   = naclReadRules('inbound', naclInbound);
+      var outRules  = naclReadRules('outbound', naclOutbound);
+
+      tf += '# ---- Network ACL ----\n';
+      tf += 'resource "aws_network_acl" "' + naclTfId + '" {\n';
+      tf += '  vpc_id = aws_vpc.' + vpcTfId + '.id\n\n';
+
+      var checkedBoxes = document.querySelectorAll('.naclSubCheck:checked');
+      if (checkedBoxes.length > 0) {
+        tf += '  subnet_ids = [\n';
+        for (var ci = 0; ci < checkedBoxes.length; ci++) {
+          var subId = parseInt(checkedBoxes[ci].value);
+          var matchedSub = subs.find(function(s) { return s.id === subId; });
+          if (matchedSub) {
+            tf += '    aws_subnet.' + tfSanitize(matchedSub.name) + '.id';
+            tf += (ci < checkedBoxes.length - 1) ? ',\n' : '\n';
+          }
+        }
+        tf += '  ]\n\n';
+      }
+
+      tf += '  tags = {\n';
+      tf += '    Name        = "' + naclName + '"\n';
+      tf += '    Environment = "' + env.name + '"\n';
+      tf += '  }\n';
+      tf += '}\n\n';
+
+      for (var ri = 0; ri < inRules.length; ri++) {
+        var r = inRules[ri];
+        var ruleId = naclTfId + '_inbound_' + r.rule;
+        tf += 'resource "aws_network_acl_rule" "' + ruleId + '" {\n';
+        tf += '  network_acl_id = aws_network_acl.' + naclTfId + '.id\n';
+        tf += '  rule_number    = ' + r.rule + '\n';
+        tf += '  egress         = false\n';
+        tf += '  protocol       = "' + r.proto + '"\n';
+        tf += '  rule_action    = "' + r.action + '"\n';
+        tf += '  cidr_block     = "' + r.cidr + '"\n';
+        if (r.proto !== '-1' && r.proto !== 'icmp') {
+          tf += '  from_port      = ' + r.fromPort + '\n';
+          tf += '  to_port        = ' + r.toPort + '\n';
+        }
+        if (r.proto === 'icmp') {
+          tf += '  icmp_type      = -1\n';
+          tf += '  icmp_code      = -1\n';
+        }
+        tf += '}\n\n';
+      }
+
+      for (var ri = 0; ri < outRules.length; ri++) {
+        var r = outRules[ri];
+        var ruleId = naclTfId + '_outbound_' + r.rule;
+        tf += 'resource "aws_network_acl_rule" "' + ruleId + '" {\n';
+        tf += '  network_acl_id = aws_network_acl.' + naclTfId + '.id\n';
+        tf += '  rule_number    = ' + r.rule + '\n';
+        tf += '  egress         = true\n';
+        tf += '  protocol       = "' + r.proto + '"\n';
+        tf += '  rule_action    = "' + r.action + '"\n';
+        tf += '  cidr_block     = "' + r.cidr + '"\n';
+        if (r.proto !== '-1' && r.proto !== 'icmp') {
+          tf += '  from_port      = ' + r.fromPort + '\n';
+          tf += '  to_port        = ' + r.toPort + '\n';
+        }
+        if (r.proto === 'icmp') {
+          tf += '  icmp_type      = -1\n';
+          tf += '  icmp_code      = -1\n';
+        }
+        tf += '}\n\n';
+      }
+    }
+
+    /* ---- Outputs ---- */
+    tf += '# ---- Outputs ----\n';
+    tf += 'output "vpc_id" {\n';
+    tf += '  value = aws_vpc.' + vpcTfId + '.id\n';
+    tf += '}\n\n';
+
+    if (createIGW) {
+      tf += 'output "internet_gateway_id" {\n';
+      tf += '  value = aws_internet_gateway.' + igwTfId + '.id\n';
+      tf += '}\n\n';
+    }
+
+    if (createNAT) {
+      tf += 'output "nat_gateway_id" {\n';
+      tf += '  value = aws_nat_gateway.' + natTfId + '.id\n';
+      tf += '}\n\n';
+      tf += 'output "nat_gateway_public_ip" {\n';
+      tf += '  value = aws_eip.' + natTfId + '_eip.public_ip\n';
+      tf += '}\n\n';
+    }
+
+    if (createNACL) {
+      tf += 'output "network_acl_id" {\n';
+      tf += '  value = aws_network_acl.' + tfSanitize(document.getElementById("tfNACLName").value || (env.name + "-nacl")) + '.id\n';
+      tf += '}\n\n';
+    }
+
+    for (var i = 0; i < subs.length; i++) {
+      var s = subs[i];
+      tf += 'output "' + tfSanitize(s.name) + '_id" {\n';
+      tf += '  value = aws_subnet.' + tfSanitize(s.name) + '.id\n';
+      tf += '}\n\n';
+    }
+
+    document.getElementById('tfOutput').textContent = tf;
+  }
+
+  function tfCopy() {
+    var text = document.getElementById('tfOutput').textContent;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function() {
+      var btn = document.getElementById('tfCopyBtn');
+      btn.textContent = 'Copied!';
+      btn.style.background = '#1B813E';
+      setTimeout(function() { btn.textContent = 'Copy to Clipboard'; btn.style.background = ''; }, 2000);
+    });
+  }
+
+  /* Init default subnets on load */
+  document.addEventListener('DOMContentLoaded', function() {
+    tfAddSubnet('public');
+    tfAddSubnet('public');
+    tfAddSubnet('private');
+    tfAddSubnet('private');
+    tfAddSubnet('private');
+    tfAddSubnet('private');
+    tfPopulate();
+    naclApplyPreset();
+    naclRefreshSubnetChecks();
+    tfGenerate();
+  });
+</script>
+</body>
+</html>
