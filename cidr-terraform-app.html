@@ -1,0 +1,1219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CIDR Calculator + Terraform Generator</title>
+<style>
+  :root {
+    --primary: #232F3E;
+    --accent: #FF9900;
+    --accent2: #146EB4;
+    --light: #F5F7FA;
+    --text: #232F3E;
+    --green: #1B813E;
+    --red: #D13212;
+    --purple: #7B2D8E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    color: var(--text);
+    background: #EEF2F7;
+  }
+  .app-shell {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 20px;
+  }
+  .app-header {
+    background: var(--primary);
+    color: white;
+    border-radius: 12px;
+    padding: 18px 22px;
+    margin-bottom: 14px;
+  }
+  .app-header h1 {
+    margin: 0;
+    font-size: 1.45rem;
+  }
+  .app-header p {
+    margin: 6px 0 0;
+    color: #C8D3DE;
+    font-size: 0.92rem;
+  }
+  .tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .tab-btn {
+    border: 1px solid #C9D2DC;
+    background: white;
+    color: #25364A;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  .tab-btn.active {
+    background: var(--accent2);
+    color: white;
+    border-color: var(--accent2);
+  }
+  .panel {
+    display: none;
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid #DEE4EB;
+  }
+  .panel.active { display: block; }
+
+  h2 {
+    margin: 0 0 12px;
+    font-size: 1.6rem;
+    border-bottom: 3px solid var(--accent);
+    display: inline-block;
+    padding-bottom: 8px;
+  }
+  h3 {
+    margin: 0;
+    color: var(--accent2);
+    font-size: 1.1rem;
+  }
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+  .card {
+    background: var(--light);
+    border-left: 5px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .card.blue { border-left-color: var(--accent2); }
+  .card.green { border-left-color: var(--green); }
+  .card.purple { border-left-color: var(--purple); }
+  .card.red { border-left-color: var(--red); }
+  .card h4 {
+    margin: 0;
+    color: var(--primary);
+    font-size: 1rem;
+  }
+  .mono { font-family: "Cascadia Code", Consolas, monospace; }
+  .highlight-box {
+    background: linear-gradient(135deg, #FFF8E1, #FFFDE7);
+    border: 1px solid #FFE082;
+    border-radius: 8px;
+    padding: 14px 16px;
+  }
+  .rule-block {
+    background: var(--light);
+    border-radius: 8px;
+    padding: 10px 12px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0;
+    font-size: 0.86rem;
+  }
+  th {
+    background: var(--primary);
+    color: white;
+    text-align: left;
+    padding: 8px 10px;
+  }
+  td {
+    border-bottom: 1px solid #E5E9EF;
+    padding: 8px 10px;
+  }
+  tr:nth-child(even) { background: #F8F9FB; }
+  .tag {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 0.8em;
+    font-weight: 600;
+  }
+  .tag.public { background: #E8F5E9; color: #2E7D32; }
+  .tag.private { background: #E3F2FD; color: #1565C0; }
+  .tag.isolated { background: #FBE9E7; color: #BF360C; }
+  .footer-note {
+    margin-top: 12px;
+    color: #8391A3;
+    font-size: 0.8rem;
+    border-top: 1px solid #E5E9EF;
+    padding-top: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+  @media (max-width: 1100px) {
+    .two-col { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <div class="app-header">
+      <h1>Enterprise VPC Utility App</h1>
+      <p>Single application for Interactive CIDR Block Calculator and Terraform Script Generator</p>
+    </div>
+
+    <div class="tabs">
+      <button id="tab-calc" class="tab-btn active" onclick="switchTab('calc')">Interactive CIDR Block Calculator</button>
+      <button id="tab-tf" class="tab-btn" onclick="switchTab('tf')">Terraform Script Generator</button>
+    </div>
+
+    <section class="panel active" id="panel-calc">
+      <h2>Interactive CIDR Block Calculator</h2>
+      <div class="two-col" style="gap:24px;">
+        <div>
+          <div class="highlight-box" style="margin-top:0;">
+            <strong>RFC 1918 Private IP Ranges (AWS VPC Allowed):</strong><br>
+            <span class="mono">10.0.0.0/8</span> &nbsp;|&nbsp; <span class="mono">172.16.0.0/12</span> &nbsp;|&nbsp; <span class="mono">192.168.0.0/16</span><br>
+            <span style="font-size:0.85em;color:#888;">AWS supports VPC CIDR prefix lengths from /16 to /28</span>
+          </div>
+
+          <div class="card" style="margin-bottom:14px;margin-top:12px;">
+            <h4>Step 1: Select Environments</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+                <input type="checkbox" id="envDev" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#4CAF50;cursor:pointer;">
+                <span style="font-weight:600;color:#2E7D32;">Dev</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+                <input type="checkbox" id="envStaging" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#FF9800;cursor:pointer;">
+                <span style="font-weight:600;color:#E65100;">Staging</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+                <input type="checkbox" id="envUAT" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#9C27B0;cursor:pointer;">
+                <span style="font-weight:600;color:#6A1B9A;">UAT</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+                <input type="checkbox" id="envProd" checked onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#F44336;cursor:pointer;">
+                <span style="font-weight:600;color:#B71C1C;">Production</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+                <input type="checkbox" id="envShared" onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#146EB4;cursor:pointer;">
+                <span style="font-weight:600;color:#0D47A1;">Shared Services</span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:6px 0;">
+                <input type="checkbox" id="envDR" onchange="calcGenerate()" style="width:18px;height:18px;accent-color:#607D8B;cursor:pointer;">
+                <span style="font-weight:600;color:#37474F;">Disaster Recovery</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card blue" style="margin-bottom:14px;">
+            <h4>Step 2: RFC 1918 Base Range</h4>
+            <select id="calcBaseRange" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #CCC;border-radius:6px;margin-top:8px;">
+              <option value="10" selected>10.0.0.0/8 (Class A &mdash; 16M IPs)</option>
+              <option value="172">172.16.0.0/12 (Class B &mdash; 1M IPs)</option>
+              <option value="192">192.168.0.0/16 (Class C &mdash; 65K IPs)</option>
+            </select>
+          </div>
+
+          <div class="card green" style="margin-bottom:14px;">
+            <h4>Step 3: VPC CIDR Prefix Length</h4>
+            <select id="calcVpcPrefix" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #CCC;border-radius:6px;margin-top:8px;">
+              <option value="16" selected>/16 (65,536 IPs per VPC)</option>
+              <option value="17">/17 (32,768 IPs per VPC)</option>
+              <option value="18">/18 (16,384 IPs per VPC)</option>
+              <option value="19">/19 (8,192 IPs per VPC)</option>
+              <option value="20">/20 (4,096 IPs per VPC)</option>
+              <option value="21">/21 (2,048 IPs per VPC)</option>
+              <option value="22">/22 (1,024 IPs per VPC)</option>
+              <option value="23">/23 (512 IPs per VPC)</option>
+              <option value="24">/24 (256 IPs per VPC)</option>
+            </select>
+          </div>
+
+          <div class="card purple" style="margin-bottom:14px;">
+            <h4>Step 4: Subnets per VPC</h4>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px;">
+              <div>
+                <label style="font-size:0.85em;font-weight:600;color:var(--green);">Public Subnets</label>
+                <select id="calcPubCount" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #A5D6A7;border-radius:6px;margin-top:4px;">
+                  <option value="1">1</option>
+                  <option value="2" selected>2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                </select>
+              </div>
+              <div>
+                <label style="font-size:0.85em;font-weight:600;color:var(--red);">Private Subnets</label>
+                <select id="calcPrivCount" onchange="calcGenerate()" style="width:100%;padding:10px;font-size:1em;border:1px solid #FFAB91;border-radius:6px;margin-top:4px;">
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4" selected>4</option>
+                  <option value="5">5</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div id="calcResults" style="min-height:300px;">
+            <!-- JS fills this -->
+          </div>
+        </div>
+      </div>
+      <div class="footer-note"><span>Enterprise VPC Architecture - CIDR Calculator</span><span>Single Utility App</span></div>
+    </section>
+
+    <section class="panel" id="panel-tf">
+      <h2>Terraform Script Generator</h2>
+      <div class="two-col" style="gap:20px;">
+        <div>
+          <div class="card" style="margin-bottom:12px;">
+            <h4>Option 1: Create VPC</h4>
+            <div style="margin-top:8px;">
+              <label style="font-size:0.85em;font-weight:600;">Select Environment</label>
+              <select id="tfEnv" onchange="tfPopulate()" style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;">
+                <option value="dev">Dev</option>
+                <option value="staging">Staging</option>
+                <option value="uat">UAT</option>
+                <option value="prod" selected>Production</option>
+                <option value="shared">Shared Services</option>
+                <option value="dr">Disaster Recovery</option>
+              </select>
+            </div>
+            <div style="margin-top:10px;">
+              <label style="font-size:0.85em;font-weight:600;">IPv4 CIDR Block <span style="font-weight:400;color:#999;">(auto-populated)</span></label>
+              <input type="text" id="tfVpcCidr" value="10.40.0.0/16" readonly style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;background:#F5F7FA;font-family:'Cascadia Code',Consolas,monospace;">
+            </div>
+            <div style="margin-top:10px;">
+              <label style="font-size:0.85em;font-weight:600;">Tenancy</label>
+              <select id="tfTenancy" style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;">
+                <option value="default" selected>Default</option>
+                <option value="dedicated">Dedicated</option>
+              </select>
+            </div>
+            <div style="margin-top:10px;">
+              <label style="font-size:0.85em;font-weight:600;">AWS Region</label>
+              <select id="tfRegion" onchange="tfPopulate()" style="width:100%;padding:9px;font-size:0.95em;border:1px solid #CCC;border-radius:6px;margin-top:4px;">
+                <option value="us-east-1" selected>us-east-1 (N. Virginia)</option>
+                <option value="us-east-2">us-east-2 (Ohio)</option>
+                <option value="us-west-1">us-west-1 (N. California)</option>
+                <option value="us-west-2">us-west-2 (Oregon)</option>
+                <option value="eu-west-1">eu-west-1 (Ireland)</option>
+                <option value="eu-central-1">eu-central-1 (Frankfurt)</option>
+                <option value="ap-south-1">ap-south-1 (Mumbai)</option>
+                <option value="ap-southeast-1">ap-southeast-1 (Singapore)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card blue" style="margin-bottom:12px;">
+            <h4>Option 2: Configure Subnets</h4>
+            <div id="tfSubnetConfig" style="margin-top:8px;max-height:220px;overflow-y:auto;">
+              <!-- JS fills this -->
+            </div>
+            <button onclick="tfAddSubnet('public')" style="padding:6px 14px;font-size:0.85em;border:1px solid #A5D6A7;background:#E8F5E9;color:#2E7D32;border-radius:5px;cursor:pointer;font-weight:600;margin-top:8px;margin-right:4px;">+ Public Subnet</button>
+            <button onclick="tfAddSubnet('private')" style="padding:6px 14px;font-size:0.85em;border:1px solid #FFAB91;background:#FBE9E7;color:#BF360C;border-radius:5px;cursor:pointer;font-weight:600;margin-top:8px;">+ Private Subnet</button>
+          </div>
+
+          <div class="card green" style="margin-bottom:12px;">
+            <h4>Option 3: Internet Gateway</h4>
+            <div style="margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="tfCreateIGW" checked style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+                <span style="font-size:0.9em;font-weight:600;">Create Internet Gateway &amp; attach to VPC</span>
+              </label>
+              <div style="margin-top:8px;">
+                <label style="font-size:0.8em;color:#888;">Gateway Name</label>
+                <input type="text" id="tfIGWName" style="width:100%;padding:8px;font-size:0.9em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+              </div>
+            </div>
+          </div>
+
+          <div class="card purple" style="margin-bottom:12px;">
+            <h4>Option 4: NAT Gateway</h4>
+            <div style="margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="tfCreateNAT" checked style="width:18px;height:18px;accent-color:var(--purple);cursor:pointer;">
+                <span style="font-size:0.9em;font-weight:600;">Create NAT Gateway + Elastic IP</span>
+              </label>
+              <div style="margin-top:8px;">
+                <label style="font-size:0.8em;color:#888;">NAT Gateway Name</label>
+                <input type="text" id="tfNATName" style="width:100%;padding:8px;font-size:0.9em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+              </div>
+              <div style="margin-top:8px;">
+                <label style="font-size:0.8em;color:#888;">Deploy in Subnet</label>
+                <select id="tfNATSubnet" style="width:100%;padding:8px;font-size:0.9em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+                  <!-- JS populates -->
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="card red" style="margin-bottom:12px;">
+            <h4>Option 5: Route Tables</h4>
+            <div style="margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;">
+                <input type="checkbox" id="tfCreatePubRT" checked style="width:18px;height:18px;accent-color:var(--green);cursor:pointer;">
+                <span style="font-size:0.9em;">Public Route Table <span style="color:#888;font-size:0.85em;">(0.0.0.0/0 &rarr; IGW)</span></span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:6px;">
+                <input type="checkbox" id="tfCreatePrivRT" checked style="width:18px;height:18px;accent-color:var(--accent2);cursor:pointer;">
+                <span style="font-size:0.9em;">Private Route Table <span style="color:#888;font-size:0.85em;">(0.0.0.0/0 &rarr; NAT GW)</span></span>
+              </label>
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" id="tfCreateDbRT" style="width:18px;height:18px;accent-color:var(--red);cursor:pointer;">
+                <span style="font-size:0.9em;">Isolated DB Route Table <span style="color:#888;font-size:0.85em;">(no internet)</span></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="card" style="margin-bottom:12px;border-left:4px solid #FF6F00;">
+            <h4 style="color:#E65100;">Option 6: Network ACLs (NACLs)</h4>
+            <div style="margin-top:8px;">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
+                <input type="checkbox" id="tfCreateNACL" checked style="width:18px;height:18px;accent-color:#FF6F00;cursor:pointer;" onchange="naclToggle()">
+                <span style="font-size:0.9em;font-weight:600;">Create Network ACL</span>
+              </label>
+              <div id="naclConfig">
+                <div style="margin-bottom:8px;">
+                  <label style="font-size:0.8em;color:#888;">NACL Name</label>
+                  <input type="text" id="tfNACLName" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+                </div>
+                <div style="margin-bottom:8px;">
+                  <label style="font-size:0.8em;color:#888;display:block;margin-bottom:4px;">Associate with Subnets</label>
+                  <div id="naclSubnetChecks" style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;max-height:80px;overflow-y:auto;">
+                    <!-- JS populates -->
+                  </div>
+                </div>
+                <div style="margin-bottom:8px;">
+                  <label style="font-size:0.8em;color:#888;">Default Rule Preset</label>
+                  <select id="naclPreset" onchange="naclApplyPreset()" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #CCC;border-radius:5px;margin-top:3px;">
+                    <option value="allow-all">Allow All Traffic (open)</option>
+                    <option value="deny-all">Deny All Traffic (locked down)</option>
+                    <option value="web-standard" selected>Web Standard (80, 443, SSH, Ephemeral)</option>
+                    <option value="custom">Custom (start empty)</option>
+                  </select>
+                </div>
+                <div style="margin-bottom:6px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <label style="font-size:0.82em;font-weight:600;color:#1B5E20;">Inbound Rules</label>
+                    <button onclick="naclAddRule('inbound')" style="padding:3px 10px;font-size:0.78em;border:1px solid #A5D6A7;background:#E8F5E9;color:#2E7D32;border-radius:4px;cursor:pointer;font-weight:600;">+ Add</button>
+                  </div>
+                  <div id="naclInboundRules" style="max-height:140px;overflow-y:auto;margin-top:4px;">
+                    <!-- JS fills -->
+                  </div>
+                </div>
+                <div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <label style="font-size:0.82em;font-weight:600;color:#B71C1C;">Outbound Rules</label>
+                    <button onclick="naclAddRule('outbound')" style="padding:3px 10px;font-size:0.78em;border:1px solid #FFAB91;background:#FBE9E7;color:#BF360C;border-radius:4px;cursor:pointer;font-weight:600;">+ Add</button>
+                  </div>
+                  <div id="naclOutboundRules" style="max-height:140px;overflow-y:auto;margin-top:4px;">
+                    <!-- JS fills -->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <button onclick="tfGenerate()" style="width:100%;padding:14px;font-size:1.1em;font-weight:700;background:var(--accent);color:white;border:none;border-radius:8px;cursor:pointer;letter-spacing:0.5px;transition:background 0.2s;">Generate Terraform Script</button>
+        </div>
+
+        <div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+            <h3>Generated Terraform Code</h3>
+            <button onclick="tfCopy()" id="tfCopyBtn" style="padding:6px 16px;font-size:0.85em;background:var(--primary);color:white;border:none;border-radius:5px;cursor:pointer;font-weight:600;">Copy to Clipboard</button>
+          </div>
+          <pre id="tfOutput" style="background:#1E1E2E;color:#CDD6F4;padding:20px;border-radius:10px;font-size:0.82em;line-height:1.6;overflow:auto;max-height:calc(100vh - 250px);font-family:'Cascadia Code',Consolas,monospace;white-space:pre;tab-size:2;margin:0;"></pre>
+        </div>
+      </div>
+      <div class="footer-note"><span>Enterprise VPC Architecture - Terraform Generator</span><span>Single Utility App</span></div>
+    </section>
+  </div>
+
+<script>
+  function switchTab(tab) {
+    var calc = document.getElementById("panel-calc");
+    var tf = document.getElementById("panel-tf");
+    var calcBtn = document.getElementById("tab-calc");
+    var tfBtn = document.getElementById("tab-tf");
+    if (tab === "calc") {
+      calc.classList.add("active");
+      tf.classList.remove("active");
+      calcBtn.classList.add("active");
+      tfBtn.classList.remove("active");
+    } else {
+      tf.classList.add("active");
+      calc.classList.remove("active");
+      tfBtn.classList.add("active");
+      calcBtn.classList.remove("active");
+    }
+  }
+
+  /* ---- CIDR Calculator Engine ---- */
+  function ipToInt(a, b, c, d) { return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0; }
+  function intToIp(n) { return [(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join("."); }
+  function nextPow2(n) { var p=1; while(p<n) p*=2; return p; }
+
+  var ENV_DEFS = [
+    { id:"envDev",     name:"Dev",              color:"#2E7D32", bg:"linear-gradient(135deg,#2E7D32,#4CAF50)",  octet10:10, octet172:16, octet192:0 },
+    { id:"envStaging", name:"Staging",          color:"#E65100", bg:"linear-gradient(135deg,#E65100,#FF9800)",  octet10:20, octet172:17, octet192:1 },
+    { id:"envUAT",     name:"UAT",              color:"#6A1B9A", bg:"linear-gradient(135deg,#4A148C,#9C27B0)", octet10:30, octet172:18, octet192:2 },
+    { id:"envProd",    name:"Production",       color:"#B71C1C", bg:"linear-gradient(135deg,#B71C1C,#F44336)", octet10:40, octet172:19, octet192:3 },
+    { id:"envShared",  name:"Shared Services",  color:"#0D47A1", bg:"linear-gradient(135deg,#0D47A1,#1976D2)", octet10:50, octet172:20, octet192:4 },
+    { id:"envDR",      name:"Disaster Recovery",color:"#37474F", bg:"linear-gradient(135deg,#37474F,#607D8B)", octet10:60, octet172:21, octet192:5 }
+  ];
+
+  function getSelectedEnvs() {
+    return ENV_DEFS.filter(function(e) { return document.getElementById(e.id).checked; });
+  }
+
+  function getVpcStart(env, base, vpcPrefix) {
+    if (base === "10")  return ipToInt(10, env.octet10, 0, 0);
+    if (base === "172") return ipToInt(172, Math.min(env.octet172, 31), 0, 0);
+    return ipToInt(192, 168, env.octet192, 0);
+  }
+
+  function calcGenerate() {
+    var envs       = getSelectedEnvs();
+    var base       = document.getElementById("calcBaseRange").value;
+    var vpcPrefix  = parseInt(document.getElementById("calcVpcPrefix").value, 10);
+    var pubCount   = parseInt(document.getElementById("calcPubCount").value, 10);
+    var privCount  = parseInt(document.getElementById("calcPrivCount").value, 10);
+    var vpcCount   = envs.length;
+
+    if (vpcCount === 0) {
+      document.getElementById("calcResults").innerHTML =
+        '<div class="highlight-box" style="border-color:#FFE082;">'+
+        "<strong>Select at least one environment</strong> from the checkboxes on the left.</div>";
+      return;
+    }
+
+    var totalSubnets   = pubCount + privCount;
+    var slotsNeeded    = nextPow2(totalSubnets);
+    var subnetBits     = Math.log2(slotsNeeded);
+    var subnetPrefix   = vpcPrefix + subnetBits;
+    var vpcTotalIPs    = Math.pow(2, 32 - vpcPrefix);
+    var subnetTotalIPs = Math.pow(2, 32 - subnetPrefix);
+    var subnetUsable   = subnetTotalIPs - 5;
+
+    if (subnetPrefix > 28) {
+      document.getElementById("calcResults").innerHTML =
+        '<div class="highlight-box" style="border-color:#EF9A9A;background:#FFEBEE;">'+
+        '<strong style="color:#D13212;">Error:</strong> Too many subnets for /' + vpcPrefix + " VPC. "+
+        "Need /" + subnetPrefix + " subnets but AWS minimum is /28. Reduce subnets or use a larger VPC prefix.</div>";
+      return;
+    }
+
+    var html = "";
+    html += '<div style="display:grid;grid-template-columns:repeat(' + Math.min(vpcCount,3) + ',1fr);gap:10px;margin-bottom:14px;">';
+    for (var i = 0; i < vpcCount; i++) {
+      var env = envs[i];
+      var vpcStartInt = getVpcStart(env, base, vpcPrefix);
+      var vpcCidr = intToIp(vpcStartInt) + "/" + vpcPrefix;
+      html += '<div style="background:' + env.bg + ';border-radius:8px;padding:14px;text-align:center;color:white;">';
+      html += '<div style="font-size:0.75em;text-transform:uppercase;letter-spacing:1px;opacity:0.9;">' + env.name + "</div>";
+      html += '<div style="font-size:1.2em;font-weight:700;margin:4px 0;font-family:Cascadia Code,Consolas,monospace;">' + vpcCidr + "</div>";
+      html += '<div style="font-size:0.8em;opacity:0.85;">' + vpcTotalIPs.toLocaleString() + " IPs</div>";
+      html += "</div>";
+    }
+    html += "</div>";
+
+    html += '<div class="rule-block" style="margin-bottom:12px;padding:10px 14px;">';
+    html += '<div style="display:flex;justify-content:space-between;font-size:0.88em;">';
+    html += "<span>Environments: <strong>" + vpcCount + "</strong></span>";
+    html += "<span>Subnets/VPC: <strong>" + totalSubnets + "</strong> (" + pubCount + " pub + " + privCount + " priv)</span>";
+    html += "<span>Subnet: <strong>/" + subnetPrefix + "</strong> (" + subnetUsable.toLocaleString() + " usable)</span>";
+    html += "</div></div>";
+
+    for (var v = 0; v < vpcCount; v++) {
+      var envV = envs[v];
+      var vpcStartIntV = getVpcStart(envV, base, vpcPrefix);
+      var vpcCidrV = intToIp(vpcStartIntV) + "/" + vpcPrefix;
+      var vpcEndInt = vpcStartIntV + vpcTotalIPs - 1;
+
+      html += '<div style="margin-bottom:14px;border-left:4px solid ' + envV.color + ';padding-left:12px;">';
+      html += '<h3 style="margin:4px 0;font-size:1.05em;color:' + envV.color + ';">' + envV.name;
+      html += ' <span class="mono" style="font-weight:400;font-size:0.9em;">' + vpcCidrV + "</span>";
+      html += ' <span style="font-size:0.75em;color:#999;font-weight:400;">(' + intToIp(vpcStartIntV) + " &ndash; " + intToIp(vpcEndInt) + ")</span>";
+      html += "</h3>";
+      html += '<table style="margin:4px 0;font-size:0.82em;">';
+      html += "<tr><th>#</th><th>Subnet Name</th><th>CIDR Block</th><th>IP Range</th><th>Usable</th><th>Type</th></tr>";
+
+      var subIdx = 0;
+      for (var s = 0; s < pubCount; s++) {
+        var subStart = vpcStartIntV + (subIdx * subnetTotalIPs);
+        var subEnd = subStart + subnetTotalIPs - 1;
+        var cidr = intToIp(subStart) + "/" + subnetPrefix;
+        var azLabel = "az-" + (s + 1);
+        html += "<tr>";
+        html += "<td>" + (subIdx + 1) + "</td>";
+        html += "<td>" + envV.name.toLowerCase().replace(/\s+/g,"-") + "-public-" + azLabel + "</td>";
+        html += '<td class="mono">' + cidr + "</td>";
+        html += '<td style="font-size:0.9em;color:#888;">' + intToIp(subStart) + " &ndash; " + intToIp(subEnd) + "</td>";
+        html += "<td>" + subnetUsable.toLocaleString() + "</td>";
+        html += '<td><span class="tag public">Public</span></td>';
+        html += "</tr>";
+        subIdx++;
+      }
+
+      var appCount = Math.ceil(privCount / 2);
+      var dbCount  = privCount - appCount;
+      for (s = 0; s < appCount; s++) {
+        subStart = vpcStartIntV + (subIdx * subnetTotalIPs);
+        subEnd = subStart + subnetTotalIPs - 1;
+        cidr = intToIp(subStart) + "/" + subnetPrefix;
+        azLabel = "az-" + ((s % Math.max(pubCount,2)) + 1);
+        html += "<tr>";
+        html += "<td>" + (subIdx + 1) + "</td>";
+        html += "<td>" + envV.name.toLowerCase().replace(/\s+/g,"-") + "-app-private-" + azLabel + "</td>";
+        html += '<td class="mono">' + cidr + "</td>";
+        html += '<td style="font-size:0.9em;color:#888;">' + intToIp(subStart) + " &ndash; " + intToIp(subEnd) + "</td>";
+        html += "<td>" + subnetUsable.toLocaleString() + "</td>";
+        html += '<td><span class="tag private">Private</span></td>';
+        html += "</tr>";
+        subIdx++;
+      }
+
+      for (s = 0; s < dbCount; s++) {
+        subStart = vpcStartIntV + (subIdx * subnetTotalIPs);
+        subEnd = subStart + subnetTotalIPs - 1;
+        cidr = intToIp(subStart) + "/" + subnetPrefix;
+        azLabel = "az-" + ((s % Math.max(pubCount,2)) + 1);
+        html += "<tr>";
+        html += "<td>" + (subIdx + 1) + "</td>";
+        html += "<td>" + envV.name.toLowerCase().replace(/\s+/g,"-") + "-db-private-" + azLabel + "</td>";
+        html += '<td class="mono">' + cidr + "</td>";
+        html += '<td style="font-size:0.9em;color:#888;">' + intToIp(subStart) + " &ndash; " + intToIp(subEnd) + "</td>";
+        html += "<td>" + subnetUsable.toLocaleString() + "</td>";
+        html += '<td><span class="tag isolated">Isolated</span></td>';
+        html += "</tr>";
+        subIdx++;
+      }
+
+      var remaining = vpcTotalIPs - (slotsNeeded * subnetTotalIPs);
+      html += "</table>";
+      html += '<div style="font-size:0.78em;color:#999;margin-top:2px;">';
+      html += "Allocated: " + (totalSubnets * subnetTotalIPs).toLocaleString() + " IPs";
+      html += " &bull; Free in VPC: " + remaining.toLocaleString() + " IPs (" + Math.round(remaining/vpcTotalIPs*100) + "%)";
+      html += "</div></div>";
+    }
+
+    var grandSubnets = vpcCount * totalSubnets;
+    var grandUsable  = vpcCount * totalSubnets * subnetUsable;
+    var grandTotal   = vpcCount * vpcTotalIPs;
+    var grandAlloc   = vpcCount * totalSubnets * subnetTotalIPs;
+    html += '<div class="highlight-box" style="margin-top:6px;">';
+    html += "<strong>Grand Total:</strong> ";
+    html += vpcCount + " VPCs &times; " + totalSubnets + " subnets = <strong>" + grandSubnets + " subnets</strong>";
+    html += " &bull; " + grandUsable.toLocaleString() + " usable IPs";
+    html += " &bull; " + Math.round((grandTotal - grandAlloc)/grandTotal*100) + "% address space reserved for growth";
+    html += "</div>";
+
+    if (vpcCount === ENV_DEFS.length) {
+      var appTierCount = Math.ceil(privCount / 2);
+      var dbTierCount  = privCount - appTierCount;
+      html += '<div class="highlight-box" style="margin-top:10px;border-color:#90CAF9;background:#E3F2FD;">';
+      html += '<strong style="color:#0D47A1;">Architecture Diagram (Auto-generated)</strong>';
+      html += '<div style="font-size:0.82em;color:#335;margin-top:2px;">All environment options selected. Diagram reflects your subnet counts and CIDR sizing.</div>';
+      html += '<div style="margin-top:8px;background:white;border-radius:10px;padding:10px;">';
+      html += '<div style="text-align:center;font-size:0.82em;color:#566;letter-spacing:0.4px;margin-bottom:8px;">Internet / Corporate Network</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;">';
+      for (var di = 0; di < envs.length; di++) {
+        var denv = envs[di];
+        var dvpcStartInt = getVpcStart(denv, base, vpcPrefix);
+        var dvpcCidr = intToIp(dvpcStartInt) + "/" + vpcPrefix;
+        html += '<div style="border:1px solid #D0D7DE;border-radius:8px;padding:8px;background:#FAFCFF;">';
+        html += '<div style="font-size:0.74em;font-weight:700;color:' + denv.color + ';text-transform:uppercase;letter-spacing:0.6px;">' + denv.name + " VPC</div>";
+        html += '<div style="font-size:0.78em;color:#334;font-family:Cascadia Code,Consolas,monospace;margin-bottom:6px;">' + dvpcCidr + "</div>";
+        html += '<div style="border:1px solid #A5D6A7;background:#E8F5E9;border-radius:6px;padding:5px;margin-bottom:4px;font-size:0.76em;">Public Tier: ' + pubCount + " x /" + subnetPrefix + "</div>";
+        html += '<div style="border:1px solid #FFCC80;background:#FFF3E0;border-radius:6px;padding:5px;margin-bottom:4px;font-size:0.76em;">App Tier: ' + appTierCount + " x /" + subnetPrefix + "</div>";
+        html += '<div style="border:1px solid #B39DDB;background:#F3E5F5;border-radius:6px;padding:5px;font-size:0.76em;">DB Tier: ' + dbTierCount + " x /" + subnetPrefix + "</div>";
+        html += "</div>";
+      }
+      html += "</div>";
+      html += '<div style="margin-top:8px;font-size:0.76em;color:#4A5568;">Flow: Internet -> Public Tier -> App Tier -> DB Tier (isolated)</div>';
+      html += "</div></div>";
+    } else {
+      html += '<div style="margin-top:8px;font-size:0.8em;color:#6B7280;">Select all environment options (Dev, Staging, UAT, Production, Shared Services, Disaster Recovery) to preview the architecture diagram here.</div>';
+    }
+
+    document.getElementById("calcResults").innerHTML = html;
+  }
+
+  /* ---- Terraform Generator Engine ---- */
+  var TF_ENV_MAP = {
+    dev:     { name:"dev",     label:"Dev",               octet:10, color:"#2E7D32" },
+    staging: { name:"staging", label:"Staging",           octet:20, color:"#E65100" },
+    uat:     { name:"uat",     label:"UAT",               octet:30, color:"#6A1B9A" },
+    prod:    { name:"prod",    label:"Production",        octet:40, color:"#B71C1C" },
+    shared:  { name:"shared",  label:"Shared Services",   octet:50, color:"#0D47A1" },
+    dr:      { name:"dr",      label:"Disaster Recovery", octet:60, color:"#37474F" }
+  };
+
+  var tfSubnets = [];
+  var tfSubnetCounter = 0;
+
+  function tfPopulate() {
+    var envKey = document.getElementById("tfEnv").value;
+    var env = TF_ENV_MAP[envKey];
+    document.getElementById("tfVpcCidr").value = "10." + env.octet + ".0.0/16";
+    document.getElementById("tfIGWName").value = env.name + "-igw";
+    document.getElementById("tfNATName").value = env.name + "-nat";
+    document.getElementById("tfNACLName").value = env.name + "-nacl";
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var el = document.getElementById("tfSubCidr_" + tfSubnets[i].id);
+      if (el) {
+        var prefix = tfSubnets[i].type === "public" ? 1 : 16;
+        var sameType = tfSubnets.filter(function(s, idx) { return s.type === tfSubnets[i].type && idx < i; });
+        var offset = sameType.length;
+        el.value = "10." + env.octet + "." + (prefix + offset) + ".0/24";
+      }
+    }
+    tfRefreshNATSubnetDropdown();
+  }
+
+  function tfRefreshNATSubnetDropdown() {
+    var sel = document.getElementById("tfNATSubnet");
+    var prev = sel.value;
+    sel.innerHTML = "";
+    var pubSubs = tfSubnets.filter(function(s) { return s.type === "public"; });
+    if (pubSubs.length === 0) {
+      var opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "(no public subnets)";
+      sel.appendChild(opt);
+    } else {
+      for (var i = 0; i < pubSubs.length; i++) {
+        var nameEl = document.getElementById("tfSubName_" + pubSubs[i].id);
+        var label = nameEl ? nameEl.value : pubSubs[i].name;
+        var optionEl = document.createElement("option");
+        optionEl.value = pubSubs[i].id;
+        optionEl.textContent = label;
+        sel.appendChild(optionEl);
+      }
+      if (prev && sel.querySelector('option[value="' + prev + '"]')) {
+        sel.value = prev;
+      }
+    }
+  }
+
+  function tfAddSubnet(type) {
+    tfSubnetCounter++;
+    var envKey = document.getElementById("tfEnv").value;
+    var env = TF_ENV_MAP[envKey];
+    var region = document.getElementById("tfRegion").value;
+    var existingSameType = tfSubnets.filter(function(s) { return s.type === type; }).length;
+    var azSuffix = String.fromCharCode(97 + (existingSameType % 3));
+    var prefix = type === "public" ? 1 : 16;
+    var cidr = "10." + env.octet + "." + (prefix + existingSameType) + ".0/24";
+    var subName = env.name + "-" + type + "-subnet-az" + (existingSameType + 1);
+    var sub = { id: tfSubnetCounter, type: type, name: subName, az: region + azSuffix, cidr: cidr };
+    tfSubnets.push(sub);
+    tfRenderSubnets();
+  }
+
+  function tfRemoveSubnet(id) {
+    tfSubnets = tfSubnets.filter(function(s) { return s.id !== id; });
+    tfRenderSubnets();
+  }
+
+  function tfRenderSubnets() {
+    var container = document.getElementById("tfSubnetConfig");
+    if (tfSubnets.length === 0) {
+      container.innerHTML = '<div style="color:#999;font-size:0.9em;padding:8px 0;">No subnets added yet. Click the buttons below to add subnets.</div>';
+      return;
+    }
+    var html = "";
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var s = tfSubnets[i];
+      var borderColor = s.type === "public" ? "#A5D6A7" : "#FFAB91";
+      var tagClass = s.type === "public" ? "public" : "isolated";
+      var tagLabel = s.type === "public" ? "Public" : "Private";
+      html += '<div style="border:1px solid ' + borderColor + ';border-radius:8px;padding:10px 12px;margin-bottom:8px;background:white;position:relative;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+      html += '<span class="tag ' + tagClass + '">' + tagLabel + "</span>";
+      html += '<button onclick="tfRemoveSubnet(' + s.id + ')" style="background:none;border:none;color:#D13212;cursor:pointer;font-size:1.1em;font-weight:700;" title="Remove">&times;</button>';
+      html += "</div>";
+      html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">';
+      html += '<div><label style="font-size:0.75em;color:#888;">Subnet Name</label>';
+      html += '<input type="text" id="tfSubName_' + s.id + '" value="' + s.name + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;"></div>';
+      html += '<div><label style="font-size:0.75em;color:#888;">Availability Zone</label>';
+      html += '<input type="text" id="tfSubAz_' + s.id + '" value="' + s.az + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;"></div>';
+      html += '<div><label style="font-size:0.75em;color:#888;">IPv4 Subnet CIDR Block</label>';
+      html += '<input type="text" id="tfSubCidr_' + s.id + '" value="' + s.cidr + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;font-family:Cascadia Code,Consolas,monospace;"></div>';
+      html += '<div><label style="font-size:0.75em;color:#888;">Map Public IP</label>';
+      html += '<select id="tfSubPubIp_' + s.id + '" style="width:100%;padding:7px;font-size:0.88em;border:1px solid #DDD;border-radius:5px;">';
+      html += '<option value="true"' + (s.type === "public" ? " selected" : "") + ">Yes</option>";
+      html += '<option value="false"' + (s.type !== "public" ? " selected" : "") + ">No</option>";
+      html += "</select></div>";
+      html += "</div></div>";
+    }
+    container.innerHTML = html;
+    tfRefreshNATSubnetDropdown();
+    naclRefreshSubnetChecks();
+  }
+
+  /* ---- NACL Engine ---- */
+  var naclInbound = [];
+  var naclOutbound = [];
+  var naclRuleCounter = 0;
+
+  function naclToggle() {
+    var on = document.getElementById("tfCreateNACL").checked;
+    document.getElementById("naclConfig").style.display = on ? "" : "none";
+  }
+
+  function naclRefreshSubnetChecks() {
+    var container = document.getElementById("naclSubnetChecks");
+    if (!container) return;
+    var html = "";
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var s = tfSubnets[i];
+      var nameEl = document.getElementById("tfSubName_" + s.id);
+      var label = nameEl ? nameEl.value : s.name;
+      var tagColor = s.type === "public" ? "#2E7D32" : "#BF360C";
+      html += '<label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:0.82em;">';
+      html += '<input type="checkbox" class="naclSubCheck" value="' + s.id + '" checked style="width:15px;height:15px;accent-color:#FF6F00;cursor:pointer;">';
+      html += '<span style="color:' + tagColor + ';">' + label + "</span>";
+      html += "</label>";
+    }
+    if (tfSubnets.length === 0) {
+      html = '<span style="color:#999;font-size:0.85em;">No subnets configured</span>';
+    }
+    container.innerHTML = html;
+  }
+
+  var NACL_PRESETS = {
+    "allow-all": {
+      inbound: [{ rule: 100, proto: "-1", fromPort: 0, toPort: 0, cidr: "0.0.0.0/0", action: "allow" }],
+      outbound: [{ rule: 100, proto: "-1", fromPort: 0, toPort: 0, cidr: "0.0.0.0/0", action: "allow" }]
+    },
+    "deny-all": { inbound: [], outbound: [] },
+    "web-standard": {
+      inbound: [
+        { rule: 100, proto: "tcp", fromPort: 80, toPort: 80, cidr: "0.0.0.0/0", action: "allow" },
+        { rule: 110, proto: "tcp", fromPort: 443, toPort: 443, cidr: "0.0.0.0/0", action: "allow" },
+        { rule: 120, proto: "tcp", fromPort: 22, toPort: 22, cidr: "0.0.0.0/0", action: "allow" },
+        { rule: 130, proto: "tcp", fromPort: 1024, toPort: 65535, cidr: "0.0.0.0/0", action: "allow" }
+      ],
+      outbound: [
+        { rule: 100, proto: "tcp", fromPort: 80, toPort: 80, cidr: "0.0.0.0/0", action: "allow" },
+        { rule: 110, proto: "tcp", fromPort: 443, toPort: 443, cidr: "0.0.0.0/0", action: "allow" },
+        { rule: 120, proto: "tcp", fromPort: 1024, toPort: 65535, cidr: "0.0.0.0/0", action: "allow" }
+      ]
+    },
+    "custom": { inbound: [], outbound: [] }
+  };
+
+  function naclApplyPreset() {
+    var preset = document.getElementById("naclPreset").value;
+    var p = NACL_PRESETS[preset];
+    naclRuleCounter = 0;
+    naclInbound = [];
+    naclOutbound = [];
+    for (var i = 0; i < p.inbound.length; i++) {
+      naclRuleCounter++;
+      var r = p.inbound[i];
+      naclInbound.push({ id: naclRuleCounter, rule: r.rule, proto: r.proto, fromPort: r.fromPort, toPort: r.toPort, cidr: r.cidr, action: r.action });
+    }
+    for (i = 0; i < p.outbound.length; i++) {
+      naclRuleCounter++;
+      r = p.outbound[i];
+      naclOutbound.push({ id: naclRuleCounter, rule: r.rule, proto: r.proto, fromPort: r.fromPort, toPort: r.toPort, cidr: r.cidr, action: r.action });
+    }
+    naclRenderRules();
+  }
+
+  function naclAddRule(direction) {
+    naclRuleCounter++;
+    var arr = direction === "inbound" ? naclInbound : naclOutbound;
+    var lastRule = arr.length > 0 ? arr[arr.length - 1].rule : 90;
+    arr.push({ id: naclRuleCounter, rule: lastRule + 10, proto: "tcp", fromPort: 443, toPort: 443, cidr: "0.0.0.0/0", action: "allow" });
+    naclRenderRules();
+  }
+
+  function naclRemoveRule(direction, id) {
+    if (direction === "inbound") {
+      naclInbound = naclInbound.filter(function(r) { return r.id !== id; });
+    } else {
+      naclOutbound = naclOutbound.filter(function(r) { return r.id !== id; });
+    }
+    naclRenderRules();
+  }
+
+  function naclRenderRules() {
+    naclRenderDir("inbound", naclInbound, document.getElementById("naclInboundRules"));
+    naclRenderDir("outbound", naclOutbound, document.getElementById("naclOutboundRules"));
+  }
+
+  function naclRenderDir(dir, rules, container) {
+    if (!container) return;
+    if (rules.length === 0) {
+      container.innerHTML = '<div style="color:#999;font-size:0.8em;padding:4px 0;">No rules. Default DENY applies.</div>';
+      return;
+    }
+    var html = "";
+    html += '<table style="width:100%;font-size:0.78em;border-collapse:collapse;">';
+    html += '<tr style="background:#F0F2F5;"><th style="padding:3px 4px;">Rule#</th><th>Protocol</th><th>From</th><th>To</th><th>CIDR</th><th>Action</th><th></th></tr>';
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i];
+      var rowBg = r.action === "deny" ? "#FFF3E0" : "#F1F8E9";
+      html += '<tr style="background:' + rowBg + ';">';
+      html += '<td><input type="number" id="naclR_' + dir + "_" + r.id + '" value="' + r.rule + '" style="width:50px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;"></td>';
+      html += '<td><select id="naclP_' + dir + "_" + r.id + '" style="padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;">';
+      html += '<option value="tcp"' + (r.proto === "tcp" ? " selected" : "") + ">TCP</option>";
+      html += '<option value="udp"' + (r.proto === "udp" ? " selected" : "") + ">UDP</option>";
+      html += '<option value="icmp"' + (r.proto === "icmp" ? " selected" : "") + ">ICMP</option>";
+      html += '<option value="-1"' + (r.proto === "-1" ? " selected" : "") + ">All</option>";
+      html += "</select></td>";
+      html += '<td><input type="number" id="naclFP_' + dir + "_" + r.id + '" value="' + r.fromPort + '" style="width:52px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;"></td>';
+      html += '<td><input type="number" id="naclTP_' + dir + "_" + r.id + '" value="' + r.toPort + '" style="width:52px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;"></td>';
+      html += '<td><input type="text" id="naclC_' + dir + "_" + r.id + '" value="' + r.cidr + '" style="width:100px;padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;font-family:monospace;"></td>';
+      html += '<td><select id="naclA_' + dir + "_" + r.id + '" style="padding:3px;font-size:0.95em;border:1px solid #DDD;border-radius:3px;">';
+      html += '<option value="allow"' + (r.action === "allow" ? " selected" : "") + ">Allow</option>";
+      html += '<option value="deny"' + (r.action === "deny" ? " selected" : "") + ">Deny</option>";
+      html += "</select></td>";
+      html += '<td><button onclick="naclRemoveRule(\'' + dir + '\',' + r.id + ')" style="background:none;border:none;color:#D13212;cursor:pointer;font-weight:700;font-size:1.1em;" title="Remove">&times;</button></td>';
+      html += "</tr>";
+    }
+    html += "</table>";
+    container.innerHTML = html;
+  }
+
+  function naclReadRules(dir, rules) {
+    var result = [];
+    for (var i = 0; i < rules.length; i++) {
+      var r = rules[i];
+      result.push({
+        rule: parseInt(document.getElementById("naclR_" + dir + "_" + r.id).value, 10) || r.rule,
+        proto: document.getElementById("naclP_" + dir + "_" + r.id).value,
+        fromPort: parseInt(document.getElementById("naclFP_" + dir + "_" + r.id).value, 10),
+        toPort: parseInt(document.getElementById("naclTP_" + dir + "_" + r.id).value, 10),
+        cidr: document.getElementById("naclC_" + dir + "_" + r.id).value,
+        action: document.getElementById("naclA_" + dir + "_" + r.id).value
+      });
+    }
+    return result;
+  }
+
+  function tfSanitize(name) {
+    return name.replace(/[^a-zA-Z0-9_-]/g, "_").replace(/-/g, "_");
+  }
+
+  function tfGenerate() {
+    var envKey = document.getElementById("tfEnv").value;
+    var env = TF_ENV_MAP[envKey];
+    var vpcCidr = document.getElementById("tfVpcCidr").value;
+    var tenancy = document.getElementById("tfTenancy").value;
+    var region = document.getElementById("tfRegion").value;
+    var vpcName = env.name + "-vpc";
+    var vpcTfId = tfSanitize(vpcName);
+    var createIGW = document.getElementById("tfCreateIGW").checked;
+    var igwName = document.getElementById("tfIGWName").value || (env.name + "-igw");
+    var igwTfId = tfSanitize(igwName);
+    var createNAT = document.getElementById("tfCreateNAT").checked;
+    var natDispName = document.getElementById("tfNATName").value || (env.name + "-nat");
+    var natTfId = tfSanitize(natDispName);
+    var natSubnetId = document.getElementById("tfNATSubnet").value;
+    var createPubRT = document.getElementById("tfCreatePubRT").checked;
+    var createPrivRT = document.getElementById("tfCreatePrivRT").checked;
+    var createDbRT = document.getElementById("tfCreateDbRT").checked;
+
+    var subs = [];
+    for (var i = 0; i < tfSubnets.length; i++) {
+      var s = tfSubnets[i];
+      subs.push({
+        id: s.id,
+        type: s.type,
+        name: document.getElementById("tfSubName_" + s.id).value,
+        az: document.getElementById("tfSubAz_" + s.id).value,
+        cidr: document.getElementById("tfSubCidr_" + s.id).value,
+        pubIp: document.getElementById("tfSubPubIp_" + s.id).value
+      });
+    }
+
+    var pubSubs = subs.filter(function(su) { return su.type === "public"; });
+    var privSubs = subs.filter(function(su) { return su.type === "private"; });
+    var tf = "";
+    tf += "# ============================================\n";
+    tf += "# Terraform - " + env.label + " VPC Infrastructure\n";
+    tf += "# Auto-generated from CIDR Calculator\n";
+    tf += "# ============================================\n\n";
+    tf += "terraform {\n";
+    tf += "  required_version = \">= 1.5.0\"\n\n";
+    tf += "  required_providers {\n";
+    tf += "    aws = {\n";
+    tf += "      source  = \"hashicorp/aws\"\n";
+    tf += "      version = \"~> 5.0\"\n";
+    tf += "    }\n";
+    tf += "  }\n";
+    tf += "}\n\n";
+    tf += "provider \"aws\" {\n";
+    tf += "  region = \"" + region + "\"\n";
+    tf += "}\n\n";
+    tf += "# ---- VPC ----\n";
+    tf += "resource \"aws_vpc\" \"" + vpcTfId + "\" {\n";
+    tf += "  cidr_block           = \"" + vpcCidr + "\"\n";
+    tf += "  instance_tenancy     = \"" + tenancy + "\"\n";
+    tf += "  enable_dns_support   = true\n";
+    tf += "  enable_dns_hostnames = true\n\n";
+    tf += "  tags = {\n";
+    tf += "    Name        = \"" + vpcName + "\"\n";
+    tf += "    Environment = \"" + env.name + "\"\n";
+    tf += "  }\n";
+    tf += "}\n\n";
+
+    if (subs.length > 0) {
+      tf += "# ---- Subnets ----\n";
+      for (i = 0; i < subs.length; i++) {
+        s = subs[i];
+        var tfId = tfSanitize(s.name);
+        tf += "resource \"aws_subnet\" \"" + tfId + "\" {\n";
+        tf += "  vpc_id                  = aws_vpc." + vpcTfId + ".id\n";
+        tf += "  cidr_block              = \"" + s.cidr + "\"\n";
+        tf += "  availability_zone       = \"" + s.az + "\"\n";
+        tf += "  map_public_ip_on_launch = " + s.pubIp + "\n\n";
+        tf += "  tags = {\n";
+        tf += "    Name        = \"" + s.name + "\"\n";
+        tf += "    Environment = \"" + env.name + "\"\n";
+        tf += "    Tier        = \"" + s.type + "\"\n";
+        tf += "  }\n";
+        tf += "}\n\n";
+      }
+    }
+
+    if (createIGW) {
+      tf += "# ---- Internet Gateway ----\n";
+      tf += "resource \"aws_internet_gateway\" \"" + igwTfId + "\" {\n";
+      tf += "  vpc_id = aws_vpc." + vpcTfId + ".id\n\n";
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + igwName + "\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+    }
+
+    if (createPubRT) {
+      tf += "# ---- Public Route Table ----\n";
+      tf += "resource \"aws_route_table\" \"" + env.name + "_public_rt\" {\n";
+      tf += "  vpc_id = aws_vpc." + vpcTfId + ".id\n\n";
+      if (createIGW) {
+        tf += "  route {\n";
+        tf += "    cidr_block = \"0.0.0.0/0\"\n";
+        tf += "    gateway_id = aws_internet_gateway." + igwTfId + ".id\n";
+        tf += "  }\n\n";
+      }
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + env.name + "-public-rt\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+      for (var j = 0; j < pubSubs.length; j++) {
+        var ps = pubSubs[j];
+        tf += "resource \"aws_route_table_association\" \"" + tfSanitize(ps.name) + "_rta\" {\n";
+        tf += "  subnet_id      = aws_subnet." + tfSanitize(ps.name) + ".id\n";
+        tf += "  route_table_id = aws_route_table." + env.name + "_public_rt.id\n";
+        tf += "}\n\n";
+      }
+    }
+
+    if (createNAT) {
+      var eipTfId = natTfId + "_eip";
+      tf += "# ---- Elastic IP for NAT Gateway ----\n";
+      tf += "resource \"aws_eip\" \"" + eipTfId + "\" {\n";
+      tf += "  domain = \"vpc\"\n\n";
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + natDispName + "-eip\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+      tf += "# ---- NAT Gateway ----\n";
+      tf += "resource \"aws_nat_gateway\" \"" + natTfId + "\" {\n";
+      tf += "  allocation_id = aws_eip." + eipTfId + ".id\n";
+      var natSub = subs.find(function(su) { return String(su.id) === String(natSubnetId); });
+      if (!natSub) natSub = pubSubs[0];
+      if (natSub) {
+        tf += "  subnet_id     = aws_subnet." + tfSanitize(natSub.name) + ".id\n";
+      }
+      tf += "\n";
+      if (createIGW) {
+        tf += "  depends_on = [aws_internet_gateway." + igwTfId + "]\n\n";
+      }
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + natDispName + "\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+    }
+
+    if (createPrivRT) {
+      tf += "# ---- Private Route Table ----\n";
+      tf += "resource \"aws_route_table\" \"" + env.name + "_private_rt\" {\n";
+      tf += "  vpc_id = aws_vpc." + vpcTfId + ".id\n\n";
+      if (createNAT) {
+        tf += "  route {\n";
+        tf += "    cidr_block     = \"0.0.0.0/0\"\n";
+        tf += "    nat_gateway_id = aws_nat_gateway." + natTfId + ".id\n";
+        tf += "  }\n\n";
+      }
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + env.name + "-private-rt\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+      for (j = 0; j < privSubs.length; j++) {
+        ps = privSubs[j];
+        tf += "resource \"aws_route_table_association\" \"" + tfSanitize(ps.name) + "_rta\" {\n";
+        tf += "  subnet_id      = aws_subnet." + tfSanitize(ps.name) + ".id\n";
+        tf += "  route_table_id = aws_route_table." + env.name + "_private_rt.id\n";
+        tf += "}\n\n";
+      }
+    }
+
+    if (createDbRT) {
+      tf += "# ---- Isolated DB Route Table (no internet) ----\n";
+      tf += "resource \"aws_route_table\" \"" + env.name + "_db_rt\" {\n";
+      tf += "  vpc_id = aws_vpc." + vpcTfId + ".id\n\n";
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + env.name + "-db-isolated-rt\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+    }
+
+    var createNACL = document.getElementById("tfCreateNACL").checked;
+    if (createNACL) {
+      var naclName = document.getElementById("tfNACLName").value || (env.name + "-nacl");
+      var naclTfId = tfSanitize(naclName);
+      var inRules = naclReadRules("inbound", naclInbound);
+      var outRules = naclReadRules("outbound", naclOutbound);
+      tf += "# ---- Network ACL ----\n";
+      tf += "resource \"aws_network_acl\" \"" + naclTfId + "\" {\n";
+      tf += "  vpc_id = aws_vpc." + vpcTfId + ".id\n\n";
+      var checkedBoxes = document.querySelectorAll(".naclSubCheck:checked");
+      if (checkedBoxes.length > 0) {
+        tf += "  subnet_ids = [\n";
+        for (var ci = 0; ci < checkedBoxes.length; ci++) {
+          var subId = parseInt(checkedBoxes[ci].value, 10);
+          var matchedSub = subs.find(function(su) { return su.id === subId; });
+          if (matchedSub) {
+            tf += "    aws_subnet." + tfSanitize(matchedSub.name) + ".id";
+            tf += (ci < checkedBoxes.length - 1) ? ",\n" : "\n";
+          }
+        }
+        tf += "  ]\n\n";
+      }
+      tf += "  tags = {\n";
+      tf += "    Name        = \"" + naclName + "\"\n";
+      tf += "    Environment = \"" + env.name + "\"\n";
+      tf += "  }\n";
+      tf += "}\n\n";
+      for (var ri = 0; ri < inRules.length; ri++) {
+        var r = inRules[ri];
+        var ruleId = naclTfId + "_inbound_" + r.rule;
+        tf += "resource \"aws_network_acl_rule\" \"" + ruleId + "\" {\n";
+        tf += "  network_acl_id = aws_network_acl." + naclTfId + ".id\n";
+        tf += "  rule_number    = " + r.rule + "\n";
+        tf += "  egress         = false\n";
+        tf += "  protocol       = \"" + r.proto + "\"\n";
+        tf += "  rule_action    = \"" + r.action + "\"\n";
+        tf += "  cidr_block     = \"" + r.cidr + "\"\n";
+        if (r.proto !== "-1" && r.proto !== "icmp") {
+          tf += "  from_port      = " + r.fromPort + "\n";
+          tf += "  to_port        = " + r.toPort + "\n";
+        }
+        if (r.proto === "icmp") {
+          tf += "  icmp_type      = -1\n";
+          tf += "  icmp_code      = -1\n";
+        }
+        tf += "}\n\n";
+      }
+      for (ri = 0; ri < outRules.length; ri++) {
+        r = outRules[ri];
+        ruleId = naclTfId + "_outbound_" + r.rule;
+        tf += "resource \"aws_network_acl_rule\" \"" + ruleId + "\" {\n";
+        tf += "  network_acl_id = aws_network_acl." + naclTfId + ".id\n";
+        tf += "  rule_number    = " + r.rule + "\n";
+        tf += "  egress         = true\n";
+        tf += "  protocol       = \"" + r.proto + "\"\n";
+        tf += "  rule_action    = \"" + r.action + "\"\n";
+        tf += "  cidr_block     = \"" + r.cidr + "\"\n";
+        if (r.proto !== "-1" && r.proto !== "icmp") {
+          tf += "  from_port      = " + r.fromPort + "\n";
+          tf += "  to_port        = " + r.toPort + "\n";
+        }
+        if (r.proto === "icmp") {
+          tf += "  icmp_type      = -1\n";
+          tf += "  icmp_code      = -1\n";
+        }
+        tf += "}\n\n";
+      }
+    }
+
+    tf += "# ---- Outputs ----\n";
+    tf += "output \"vpc_id\" {\n";
+    tf += "  value = aws_vpc." + vpcTfId + ".id\n";
+    tf += "}\n\n";
+    if (createIGW) {
+      tf += "output \"internet_gateway_id\" {\n";
+      tf += "  value = aws_internet_gateway." + igwTfId + ".id\n";
+      tf += "}\n\n";
+    }
+    if (createNAT) {
+      tf += "output \"nat_gateway_id\" {\n";
+      tf += "  value = aws_nat_gateway." + natTfId + ".id\n";
+      tf += "}\n\n";
+      tf += "output \"nat_gateway_public_ip\" {\n";
+      tf += "  value = aws_eip." + natTfId + "_eip.public_ip\n";
+      tf += "}\n\n";
+    }
+    if (createNACL) {
+      tf += "output \"network_acl_id\" {\n";
+      tf += "  value = aws_network_acl." + tfSanitize(document.getElementById("tfNACLName").value || (env.name + "-nacl")) + ".id\n";
+      tf += "}\n\n";
+    }
+    for (i = 0; i < subs.length; i++) {
+      s = subs[i];
+      tf += "output \"" + tfSanitize(s.name) + "_id\" {\n";
+      tf += "  value = aws_subnet." + tfSanitize(s.name) + ".id\n";
+      tf += "}\n\n";
+    }
+    document.getElementById("tfOutput").textContent = tf;
+  }
+
+  function tfCopy() {
+    var text = document.getElementById("tfOutput").textContent;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(function() {
+      var btn = document.getElementById("tfCopyBtn");
+      btn.textContent = "Copied!";
+      btn.style.background = "#1B813E";
+      setTimeout(function() {
+        btn.textContent = "Copy to Clipboard";
+        btn.style.background = "";
+      }, 2000);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function() {
+    calcGenerate();
+    tfAddSubnet("public");
+    tfAddSubnet("public");
+    tfAddSubnet("private");
+    tfAddSubnet("private");
+    tfAddSubnet("private");
+    tfAddSubnet("private");
+    tfPopulate();
+    naclApplyPreset();
+    naclRefreshSubnetChecks();
+    tfGenerate();
+  });
+</script>
+</body>
+</html>
